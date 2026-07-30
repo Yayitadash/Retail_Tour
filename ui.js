@@ -47,6 +47,7 @@ function titleCase(s) {
   return s.toLowerCase().replace(/(^|\s|\/|\.)([a-záéíóúñ])/g, (m, p1, p2) => p1 + p2.toUpperCase());
 }
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+function catLabel(cat) { return cat ? String(cat).toUpperCase() : cat; }
 
 function yayaBubble(text, extraClass) {
   return `
@@ -391,7 +392,7 @@ function renderSucursalBriefing() {
     ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
     ${sucRow ? renderStoreCard(sucRow) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
-    ${topCat ? yayaBubble(L('topDriver', titleCase(topCat)), 'yaya-bubble-story') : ''}
+    ${topCat ? yayaBubble(L('topDriver', catLabel(topCat)), 'yaya-bubble-story') : ''}
     ${renderRecommendationCard(sucRow)}
     ${renderClosingCard()}
   `;
@@ -440,7 +441,7 @@ function renderStoreCard(sucRow) {
             ${catEntries.map(c => `
               <li>
                 <button class="cat-list-btn ${state.selectedCat === c.cat ? 'active' : ''}" data-select-cat="${escapeAttr(c.cat)}">
-                  ${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span>
+                  ${catLabel(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span>
                 </button>
               </li>`).join('')}
           </ul>
@@ -496,7 +497,7 @@ function renderDetailPanel(sucRow) {
         ${d.cat && d.cat.length ? `
           <div class="detail-section">
             <span class="detail-section-label">${L('categoriesIn')}</span>
-            <ul class="cat-list">${d.cat.map(c => `<li>${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCat * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
+            <ul class="cat-list">${d.cat.map(c => `<li>${catLabel(c.cat)} <span class="cat-pct">(${(c.u / totalCat * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
           </div>` : ''}
         ${d.gen && Object.keys(d.gen).length ? `
           <div class="detail-section">
@@ -516,7 +517,7 @@ function renderDetailPanel(sucRow) {
     const totalUn = (d.un || []).reduce((s, u) => s + u.u, 0) || 1;
     return `
       <div class="detail-panel">
-        <div class="detail-panel-title">${titleCase(state.selectedCat)}</div>
+        <div class="detail-panel-title">${catLabel(state.selectedCat)}</div>
         ${d.un && d.un.length ? `
           <div class="detail-section">
             <span class="detail-section-label">${L('businessUnitsIn')}</span>
@@ -587,10 +588,10 @@ function buildRecommendations(sucRow) {
     const catFams = (sucRow.dc && sucRow.dc[topCat] && sucRow.dc[topCat].fam) || [];
     const hot = catFams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
     if (hot) {
-      lines.push(L('recoHotItem', titleCase(hot.fam), titleCase(topCat)));
+      lines.push(L('recoHotItem', titleCase(hot.fam), catLabel(topCat)));
       hotItemFound = true;
     } else {
-      lines.push(L('recoCat', titleCase(topCat)));
+      lines.push(L('recoCat', catLabel(topCat)));
     }
   }
 
