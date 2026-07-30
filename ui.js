@@ -217,9 +217,13 @@ function renderClienteStep() {
   });
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
-  const filterRow = CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
-    <button class="clasif-filter-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}" title="${classifLabel(k, state.lang)} — ${classifDesc(k, state.lang)}">
-      ${CLASIFICACIONES[k].icon}
+  const filterButtons = CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
+    <button class="clasif-long-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}">
+      <span class="clasif-long-icon">${CLASIFICACIONES[k].icon}</span>
+      <span class="clasif-long-text">
+        <span class="clasif-long-name">${classifLabel(k, state.lang)}</span>
+        <span class="clasif-long-desc">${classifDesc(k, state.lang)}</span>
+      </span>
     </button>`).join('');
 
   const visibles = state.clasifFilter
@@ -231,20 +235,7 @@ function renderClienteStep() {
       ${yayaBubble(L('confirmPais', titleCase(state.pais)))}
       <h1>${L('askCliente')}</h1>
     </div>
-    <div class="clasif-filter-row">${filterRow}</div>
-    <button class="clasif-legend-toggle" id="clasifLegendToggle">${state.clasifLegendOpen ? L('hideIconsMean') : L('whatIconsMean')}</button>
-    ${state.clasifLegendOpen ? `
-      <div class="clasif-legend">
-        ${CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
-          <div class="clasif-legend-item">
-            <span class="clasif-legend-icon" style="--c:${CLASIFICACIONES[k].color}">${CLASIFICACIONES[k].icon}</span>
-            <div>
-              <div class="clasif-legend-name" style="color:${CLASIFICACIONES[k].color}">${classifLabel(k, state.lang)}</div>
-              <div class="clasif-legend-desc">${classifDesc(k, state.lang)}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>` : ''}
+    <div class="clasif-long-list">${filterButtons}</div>
     <div class="pick-list">
       ${visibles.map(({ c, clasif }) => {
         const badge = clasif
@@ -634,12 +625,6 @@ function attachHandlers() {
       state.clasifFilter = state.clasifFilter === k ? null : k;
       render();
     });
-  });
-
-  const clasifLegendToggle = document.getElementById('clasifLegendToggle');
-  if (clasifLegendToggle) clasifLegendToggle.addEventListener('click', () => {
-    state.clasifLegendOpen = !state.clasifLegendOpen;
-    render();
   });
 
   document.querySelectorAll('[data-select-un]').forEach(el => {
