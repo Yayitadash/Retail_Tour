@@ -27,12 +27,12 @@ function periodoAddMonths(p, delta) {
 function sameMonthPrevYear(p) { return p - 100; }
 
 const CLASIFICACIONES = {
-  'Las Estrellas':   { color: '#D9A63C', label: 'Las Estrellas' },
-  'Las Aceleradas':  { color: '#3C8B62', label: 'Las Aceleradas' },
-  'Las Robustas':    { color: '#3B5B8C', label: 'Las Robustas' },
-  'Zona de Riesgo':  { color: '#C08A2E', label: 'Zona de Riesgo' },
-  'Desabastecidas':  { color: '#B85C3E', label: 'Desabastecidas' },
-  'Riesgo Crítico':  { color: '#9C3B3B', label: 'Riesgo Crítico' }
+  'Las Estrellas':   { color: '#D9A63C', label: 'Las Estrellas', icon: '⭐' },
+  'Las Aceleradas':  { color: '#3C8B62', label: 'Las Aceleradas', icon: '🚀' },
+  'Las Robustas':    { color: '#3B5B8C', label: 'Las Robustas', icon: '🌳' },
+  'Zona de Riesgo':  { color: '#C08A2E', label: 'Zona de Riesgo', icon: '⚠️' },
+  'Desabastecidas':  { color: '#B85C3E', label: 'Desabastecidas', icon: '📦' },
+  'Riesgo Crítico':  { color: '#9C3B3B', label: 'Riesgo Crítico', icon: '🚨' }
 };
 
 /**
