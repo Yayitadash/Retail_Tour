@@ -126,10 +126,11 @@ function render() {
   $app.innerHTML = `
     <header class="topbar">
       <div class="brand">
-        <button class="yaya-mini" id="yayaMini" title="${L('changeName')}">${getYayaAvatar()}</button>
+        <span class="brand-mark">RT</span>
         <span class="brand-name">Retail Tour</span>
       </div>
       <div class="topbar-actions">
+        <button class="yaya-mini" id="yayaMini" title="${L('changeName')}">${getYayaAvatar()}</button>
         <button class="lang-toggle" id="langToggle">${state.lang.toUpperCase()}</button>
         <button class="upload-btn" id="btnUpload" title="${L('update')}">⇪</button>
       </div>
