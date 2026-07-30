@@ -557,23 +557,55 @@ function renderRecommendationCard(sucRow) {
     </div>`;
 }
 
+function dominantGen(genObj) {
+  if (!genObj) return null;
+  const entries = Object.entries(genObj);
+  if (!entries.length) return null;
+  entries.sort((a, b) => b[1].u - a[1].u);
+  return entries[0][0];
+}
+
 function buildRecommendations(sucRow) {
   const lines = [];
-  if (sucRow) {
-    const unLabels = t(state.lang, 'unLabels');
-    const unEntries = Object.entries(sucRow.un || {}).sort((a, b) => b[1].u - a[1].u);
-    if (unEntries.length) {
-      const [topUn] = unEntries[0];
-      lines.push(L('recoUn', unLabels[topUn] || topUn));
-    }
-    if (sucRow.cat && sucRow.cat.length) {
-      lines.push(L('recoCat', titleCase(sucRow.cat[0].cat)));
-    }
-    if (sucRow.fam && sucRow.fam.length) {
-      const low = sucRow.fam.find(f => f.e && f.u && (f.e / f.u * 4.33) < 10);
-      if (low) lines.push(L('recoLowWoh', titleCase(low.fam)));
+  if (!sucRow) return lines;
+  const unLabels = t(state.lang, 'unLabels');
+  const genLabels = t(state.lang, 'genLabels');
+
+  // 1) Unidad de negocio líder + su género dominante
+  const unEntries = Object.entries(sucRow.un || {}).sort((a, b) => b[1].u - a[1].u);
+  if (unEntries.length) {
+    const [topUn] = unEntries[0];
+    const gen = sucRow.du && sucRow.du[topUn] ? dominantGen(sucRow.du[topUn].gen) : null;
+    if (gen) lines.push(L('recoUnGen', unLabels[topUn] || topUn, genLabels[gen] || gen));
+    else lines.push(L('recoCat', unLabels[topUn] || topUn));
+  }
+
+  // 2) Producto de alta rotación con inventario en zona crítica, dentro de la categoría líder
+  let hotItemFound = false;
+  if (sucRow.cat && sucRow.cat.length) {
+    const topCat = sucRow.cat[0].cat;
+    const catFams = (sucRow.dc && sucRow.dc[topCat] && sucRow.dc[topCat].fam) || [];
+    const hot = catFams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
+    if (hot) {
+      lines.push(L('recoHotItem', titleCase(hot.fam), titleCase(topCat)));
+      hotItemFound = true;
+    } else {
+      lines.push(L('recoCat', titleCase(topCat)));
     }
   }
+
+  // 3) Alerta de posible quiebre de tallas, solo Calzado y Ropa
+  for (const un of ['FW', 'APP']) {
+    const d = sucRow.du && sucRow.du[un];
+    if (!d || !d.fam || !d.fam.length) continue;
+    const low = d.fam.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
+    if (low) {
+      const gen = dominantGen(d.gen);
+      lines.push(L('recoLowWohSizes', titleCase(low.fam), gen ? (genLabels[gen] || gen) : (unLabels[un] || un)));
+      break;
+    }
+  }
+
   return lines;
 }
 
