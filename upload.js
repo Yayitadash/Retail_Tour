@@ -16,12 +16,18 @@ const COLMAP = {
   existencia: ['EXISTENCIA']
 };
 
-function findCol(headers, candidates) {
+const findCol = (headers, candidates) => {
   for (const c of candidates) {
     const hit = headers.find(h => h.trim().toUpperCase() === c.toUpperCase());
     if (hit) return hit;
   }
   return null;
+};
+
+const CENTROAMERICA_PAISES = new Set(['COSTA RICA', 'EL SALVADOR', 'GUATEMALA', 'HONDURAS', 'PANAMA', 'ZONA LIBRE DE COLON']);
+function remapRegion(pais, rawRegion) {
+  if (rawRegion === 'CAC') return CENTROAMERICA_PAISES.has(pais) ? 'CEN' : 'CAR';
+  return rawRegion;
 }
 
 async function parseUploadedFile(file) {
@@ -46,9 +52,26 @@ async function parseUploadedFile(file) {
   const sucursalTotales = {}; // cliente -> sucursal -> periodo -> {u,v,e}
   const sucursalUN = {};      // cliente -> sucursal -> periodo -> UN -> {u,v}
   const sucursalCAT = {};     // cliente -> sucursal -> periodo -> CAT -> {u,v}
-  const sucursalFAM = {};     // cliente -> sucursal -> periodo -> familia -> {u,v}
+  const sucursalFAM = {};     // cliente -> sucursal -> periodo -> familia -> {u,v,e}
+  const unCat = {};   // c->s->p->UN->CAT->{u,v}
+  const unGen = {};   // c->s->p->UN->GEN->{u,v}
+  const unFam = {};   // c->s->p->UN->fam->{u,v,e}
+  const catUn = {};   // c->s->p->CAT->UN->{u,v}
+  const catGen = {};  // c->s->p->CAT->GEN->{u,v}
+  const catFam = {};  // c->s->p->CAT->fam->{u,v,e}
   const periodosVistos = new Set();
   const navDelta = {};
+
+  function bump(map, keys, unidades, valor, existencia) {
+    let node = map;
+    for (let i = 0; i < keys.length - 1; i++) {
+      node[keys[i]] = node[keys[i]] || {};
+      node = node[keys[i]];
+    }
+    const last = keys[keys.length - 1];
+    node[last] = node[last] || { u: 0, v: 0, e: 0 };
+    node[last].u += unidades; node[last].v += valor; node[last].e += existencia;
+  }
 
   for (const r of rows) {
     const mes = Number(r[cols.mes]);
@@ -57,8 +80,9 @@ async function parseUploadedFile(file) {
     const periodo = anio * 100 + mes;
     periodosVistos.add(periodo);
 
-    const region = String(r[cols.region] ?? '').trim();
+    const rawRegion = String(r[cols.region] ?? '').trim();
     const pais = String(r[cols.pais] ?? '').trim();
+    const region = remapRegion(pais, rawRegion);
     const cliente = String(r[cols.cliente] ?? '').trim();
     const sucursal = String(r[cols.sucursal] ?? '').trim();
     const marca = r[cols.marca];
@@ -105,9 +129,18 @@ async function parseUploadedFile(file) {
     sucursalFAM[cliente] = sucursalFAM[cliente] || {};
     sucursalFAM[cliente][sucursal] = sucursalFAM[cliente][sucursal] || {};
     sucursalFAM[cliente][sucursal][periodo] = sucursalFAM[cliente][sucursal][periodo] || {};
-    const fam_ = sucursalFAM[cliente][sucursal][periodo][familia] || { u: 0, v: 0 };
-    fam_.u += unidades; fam_.v += valor;
+    const fam_ = sucursalFAM[cliente][sucursal][periodo][familia] || { u: 0, v: 0, e: 0 };
+    fam_.u += unidades; fam_.v += valor; fam_.e += existencia;
     sucursalFAM[cliente][sucursal][periodo][familia] = fam_;
+
+    // Detalle cruzado (para botones interactivos UN / CAT)
+    const gen = String(r[cols.gen] ?? '').trim();
+    bump(unCat, [cliente, sucursal, periodo, un, cat], unidades, valor, 0);
+    bump(unGen, [cliente, sucursal, periodo, un, gen], unidades, valor, 0);
+    bump(unFam, [cliente, sucursal, periodo, un, familia], unidades, valor, existencia);
+    bump(catUn, [cliente, sucursal, periodo, cat, un], unidades, valor, 0);
+    bump(catGen, [cliente, sucursal, periodo, cat, gen], unidades, valor, 0);
+    bump(catFam, [cliente, sucursal, periodo, cat, familia], unidades, valor, existencia);
 
     // Nav
     navDelta[region] = navDelta[region] || {};
@@ -144,11 +177,45 @@ async function parseUploadedFile(file) {
           .map(([cat, v]) => ({ cat, u: v.u, v: Math.round(v.v * 100) / 100 }));
         const famTop = Object.entries(famObj)
           .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
-          .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100 }));
+          .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
+
+        // Detalle por UN: para cada UN presente, sus categorías/género/familias top
+        const du = {};
+        const ucNode = unCat[cliente]?.[sucursal]?.[periodo] || {};
+        const ugNode = unGen[cliente]?.[sucursal]?.[periodo] || {};
+        const ufNode = unFam[cliente]?.[sucursal]?.[periodo] || {};
+        for (const un in unObj) {
+          const catList = Object.entries(ucNode[un] || {})
+            .sort((a, b) => b[1].u - a[1].u).slice(0, 4)
+            .map(([cat, v]) => ({ cat, u: v.u, v: Math.round(v.v * 100) / 100 }));
+          const genObj = {};
+          for (const [gen, v] of Object.entries(ugNode[un] || {})) genObj[gen] = { u: v.u, v: Math.round(v.v * 100) / 100 };
+          const famList = Object.entries(ufNode[un] || {})
+            .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
+            .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
+          du[un] = { cat: catList, gen: genObj, fam: famList };
+        }
+
+        // Detalle por CAT: solo para las top-3 categorías mostradas
+        const dc = {};
+        const cuNode = catUn[cliente]?.[sucursal]?.[periodo] || {};
+        const cgNode = catGen[cliente]?.[sucursal]?.[periodo] || {};
+        const cfNode = catFam[cliente]?.[sucursal]?.[periodo] || {};
+        for (const { cat } of catTop) {
+          const unList = Object.entries(cuNode[cat] || {})
+            .sort((a, b) => b[1].u - a[1].u)
+            .map(([un, v]) => ({ un, u: v.u, v: Math.round(v.v * 100) / 100 }));
+          const genObj = {};
+          for (const [gen, v] of Object.entries(cgNode[cat] || {})) genObj[gen] = { u: v.u, v: Math.round(v.v * 100) / 100 };
+          const famList = Object.entries(cfNode[cat] || {})
+            .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
+            .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
+          dc[cat] = { un: unList, gen: genObj, fam: famList };
+        }
 
         sucursalPeriodoOut[cliente][sucursal].push({
           p, u: tot.u, v: Math.round(tot.v * 100) / 100, e: Math.round(tot.e * 100) / 100,
-          un: unObj, cat: catTop, fam: famTop
+          un: unObj, cat: catTop, fam: famTop, du, dc
         });
       }
     }

@@ -7,12 +7,13 @@ const state = {
   step: 'welcome', // welcome | region | pais | cliente | cuenta | sucursal
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
+  selectedUn: null, selectedCat: null,
   lang: loadLang(),
   user: loadUser(),
   loading: true
 };
 
-const REGION_LABELS = { CAC: 'Caribe / Centroamérica', COL: 'Colombia', VEN: 'Venezuela' };
+const REGION_LABELS = { CEN: 'Centroamérica', CAR: 'Caribe', COL: 'Colombia', VEN: 'Venezuela' };
 
 const $app = document.getElementById('app');
 
@@ -388,35 +389,116 @@ function renderStoreCard(sucRow) {
       </div>
       <div class="un-bars">
         ${unEntries.map(([un, v]) => `
-          <div class="un-bar-row">
+          <button class="un-bar-row ${state.selectedUn === un ? 'active' : ''}" data-select-un="${un}">
             <span class="un-bar-label">${unLabels[un] || un}</span>
             <div class="un-bar-track"><div class="un-bar-fill" style="width:${(v.u / totalUnUnits * 100).toFixed(0)}%"></div></div>
             <span class="un-bar-pct">${(v.u / totalUnUnits * 100).toFixed(0)}%</span>
-          </div>
+          </button>
         `).join('')}
       </div>
+      <span class="tap-hint">${L('tapToExplore')}</span>
       ${catEntries.length ? `
         <div class="chip-row">
           <span class="chip-row-label">${L('concentratedIn')}...</span>
           <ul class="cat-list">
-            ${catEntries.map(c => `<li>${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span></li>`).join('')}
+            ${catEntries.map(c => `
+              <li>
+                <button class="cat-list-btn ${state.selectedCat === c.cat ? 'active' : ''}" data-select-cat="${escapeAttr(c.cat)}">
+                  ${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span>
+                </button>
+              </li>`).join('')}
           </ul>
         </div>` : ''}
+      ${renderDetailPanel(sucRow)}
       ${sucRow.fam && sucRow.fam.length ? `
         <div class="chip-row">
           <span class="chip-row-label">${L('leadingFamilies')}</span>
-          <div class="fam-list">
-            ${sucRow.fam.map(f => {
-              const famWoh = (f.e && f.u) ? (f.e / f.u * 4.33) : null;
-              return `
-              <div class="fam-item">
-                <span class="fam-name">${titleCase(f.fam)}</span>
-                <span class="fam-meta">${fmtMoney(f.v)} · ${L('monthWoh')}: ${fmtWoh(famWoh)}</span>
-              </div>`;
-            }).join('')}
-          </div>
+          ${renderFamList(sucRow.fam)}
         </div>` : ''}
     </div>`;
+}
+
+function renderFamList(famArr) {
+  return `
+    <div class="fam-list">
+      ${famArr.map(f => {
+        const famWoh = (f.e && f.u) ? (f.e / f.u * 4.33) : null;
+        return `
+        <div class="fam-item">
+          <span class="fam-name">${titleCase(f.fam)}</span>
+          <span class="fam-meta">${fmtMoney(f.v)} · ${L('monthWoh')}: ${fmtWoh(famWoh)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderGenBreakdown(genObj) {
+  const genLabels = t(state.lang, 'genLabels');
+  const order = ['MEN', 'WOMEN', 'KIDS'];
+  const entries = order.filter(g => genObj[g]).map(g => [g, genObj[g]]);
+  const total = entries.reduce((s, [, v]) => s + v.u, 0) || 1;
+  return `
+    <div class="gen-bars">
+      ${entries.map(([g, v]) => `
+        <div class="gen-bar-row">
+          <span class="gen-bar-label">${genLabels[g] || g}</span>
+          <div class="un-bar-track"><div class="un-bar-fill gen-fill" style="width:${(v.u / total * 100).toFixed(0)}%"></div></div>
+          <span class="un-bar-pct">${(v.u / total * 100).toFixed(0)}%</span>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function renderDetailPanel(sucRow) {
+  if (state.selectedUn && sucRow.du && sucRow.du[state.selectedUn]) {
+    const d = sucRow.du[state.selectedUn];
+    const unLabels = t(state.lang, 'unLabels');
+    const totalCat = (d.cat || []).reduce((s, c) => s + c.u, 0) || 1;
+    return `
+      <div class="detail-panel">
+        <div class="detail-panel-title">${unLabels[state.selectedUn] || state.selectedUn}</div>
+        ${d.cat && d.cat.length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('categoriesIn')}</span>
+            <ul class="cat-list">${d.cat.map(c => `<li>${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCat * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
+          </div>` : ''}
+        ${d.gen && Object.keys(d.gen).length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('genderIn')}</span>
+            ${renderGenBreakdown(d.gen)}
+          </div>` : ''}
+        ${d.fam && d.fam.length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('familiesIn')}</span>
+            ${renderFamList(d.fam)}
+          </div>` : ''}
+      </div>`;
+  }
+  if (state.selectedCat && sucRow.dc && sucRow.dc[state.selectedCat]) {
+    const d = sucRow.dc[state.selectedCat];
+    const unLabels = t(state.lang, 'unLabels');
+    const totalUn = (d.un || []).reduce((s, u) => s + u.u, 0) || 1;
+    return `
+      <div class="detail-panel">
+        <div class="detail-panel-title">${titleCase(state.selectedCat)}</div>
+        ${d.un && d.un.length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('businessUnitsIn')}</span>
+            <ul class="cat-list">${d.un.map(u => `<li>${unLabels[u.un] || u.un} <span class="cat-pct">(${(u.u / totalUn * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
+          </div>` : ''}
+        ${d.gen && Object.keys(d.gen).length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('genderIn')}</span>
+            ${renderGenBreakdown(d.gen)}
+          </div>` : ''}
+        ${d.fam && d.fam.length ? `
+          <div class="detail-section">
+            <span class="detail-section-label">${L('familiesIn')}</span>
+            ${renderFamList(d.fam)}
+          </div>` : ''}
+      </div>`;
+  }
+  return '';
 }
 
 function renderRecommendationCard(sucRow) {
@@ -477,8 +559,8 @@ function attachHandlers() {
       const value = el.getAttribute('data-value');
       if (kind === 'region') { state.region = value; state.step = 'pais'; }
       else if (kind === 'pais') { state.pais = value; state.step = 'cliente'; }
-      else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.step = 'cuenta'; }
-      else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.step = 'sucursal'; }
+      else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'cuenta'; }
+      else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'sucursal'; }
       render();
     });
   });
@@ -502,8 +584,26 @@ function attachHandlers() {
   if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', () => {
     state.sucursal = null;
     state.periodo = null;
+    state.selectedUn = null; state.selectedCat = null;
     state.step = 'cuenta';
     render();
+  });
+
+  document.querySelectorAll('[data-select-un]').forEach(el => {
+    el.addEventListener('click', () => {
+      const un = el.getAttribute('data-select-un');
+      state.selectedUn = state.selectedUn === un ? null : un;
+      state.selectedCat = null;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-select-cat]').forEach(el => {
+    el.addEventListener('click', () => {
+      const cat = el.getAttribute('data-select-cat');
+      state.selectedCat = state.selectedCat === cat ? null : cat;
+      state.selectedUn = null;
+      render();
+    });
   });
 
   const btnUpload = document.getElementById('btnUpload');
@@ -536,6 +636,7 @@ function shiftPeriod(dir) {
   const newIdx = idx + dir;
   if (newIdx >= 0 && newIdx < periods.length) {
     state.periodo = periods[newIdx];
+    state.selectedUn = null; state.selectedCat = null;
     render();
   }
 }
