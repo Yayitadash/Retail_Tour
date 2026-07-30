@@ -122,3 +122,19 @@ function recentForm(fullHistory, periodo, n = 6) {
   const upTo = fullHistory.filter(h => h.periodo <= periodo).slice(-n);
   return upTo;
 }
+
+/** Detecta racha de crecimiento (positivo o negativo) para narrar tendencia */
+function detectGrowthTrend(fullHistory, periodo) {
+  const idx = fullHistory.findIndex(h => h.periodo === periodo);
+  if (idx === -1 || fullHistory[idx].growthUnits === null) return null;
+  const positive = fullHistory[idx].growthUnits >= -0.02;
+  let months = 1;
+  for (let i = idx - 1; i >= 0; i--) {
+    const g = fullHistory[i].growthUnits;
+    if (g === null) break;
+    if ((g >= -0.02) === positive) months++;
+    else break;
+  }
+  if (months < 2) return null;
+  return { positive, months };
+}

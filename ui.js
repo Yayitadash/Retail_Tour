@@ -63,12 +63,26 @@ async function loadData() {
     state.clientePeriodo = clientePeriodo;
     state.sucursalPeriodo = sucursalPeriodo;
     state.loading = false;
-    state.step = 'region';
-    render();
+    state.step = 'greeting';
+    renderGreetingCard();
   } catch (err) {
     console.error(err);
     $app.innerHTML = `<div class="error-screen"><p>${err.message}</p></div>`;
   }
+}
+
+function renderGreetingCard() {
+  $app.innerHTML = `
+    <div class="welcome-screen">
+      <div class="welcome-avatar-big">${getYayaAvatar()}</div>
+      <h1 class="welcome-title">${L('greetingCardTitle', state.user.name.split(' ')[0])}</h1>
+      <p class="welcome-sub">${L('greetingCardBody')}</p>
+      <button class="start-btn" id="continueBtn">${L('continueBtn')}</button>
+    </div>`;
+  document.getElementById('continueBtn').addEventListener('click', () => {
+    state.step = 'region';
+    render();
+  });
 }
 
 function renderLoading() {
@@ -145,8 +159,7 @@ function renderRegionStep() {
   return `
     <div class="step-head">
       <p class="yaya-greeting">${L('greeting', state.user.name.split(' ')[0])}</p>
-      <h1>${L('whereToday')}</h1>
-      <p class="step-sub">${L('stepStart')}</p>
+      <h1>${L('askRegion')}</h1>
     </div>
     <div class="card-grid">
       ${regions.map(r => `
@@ -162,7 +175,10 @@ function renderRegionStep() {
 function renderPaisStep() {
   const paises = Object.keys(state.nav[state.region]).sort();
   return `
-    <div class="step-head"><h1>${L('whichCountry')}</h1></div>
+    <div class="step-head">
+      <p class="yaya-greeting">${L('confirmRegion', REGION_LABELS[state.region] || state.region)}</p>
+      <h1>${L('askPais')}</h1>
+    </div>
     <div class="card-grid">
       ${paises.map(p => `
         <button class="pick-card" data-pick="pais" data-value="${p}">
@@ -177,7 +193,10 @@ function renderPaisStep() {
 function renderClienteStep() {
   const clientes = Object.keys(state.nav[state.region][state.pais]).sort();
   return `
-    <div class="step-head"><h1>${L('whichAccount')}</h1></div>
+    <div class="step-head">
+      <p class="yaya-greeting">${L('confirmPais', titleCase(state.pais))}</p>
+      <h1>${L('askCliente')}</h1>
+    </div>
     <div class="pick-list">
       ${clientes.map(c => {
         const cd = state.clientePeriodo[c];
@@ -205,6 +224,7 @@ function renderCuentaStep() {
   const metrics = computeMetricsForPeriod(cd.hist, periodo);
   const streak = detectStreak(fullHist, periodo);
   const form = recentForm(fullHist, periodo, 6);
+  const trend = detectGrowthTrend(fullHist, periodo);
 
   const canPrev = cd.hist.some(r => r.p < periodo);
   const canNext = cd.hist.some(r => r.p > periodo);
@@ -212,15 +232,20 @@ function renderCuentaStep() {
   const sucursales = (state.nav[state.region][state.pais][state.cliente] || []).slice().sort();
 
   return `
+    <div class="step-head">
+      <p class="yaya-greeting">${L('confirmCliente', titleCase(state.cliente))}</p>
+    </div>
     <div class="period-nav">
       <button class="period-arrow" id="periodPrev" ${canPrev ? '' : 'disabled'}>‹</button>
       <span class="period-label">${periodoLabelI18n(periodo, state.lang)}</span>
       <button class="period-arrow" id="periodNext" ${canNext ? '' : 'disabled'}>›</button>
     </div>
+    <p class="yaya-line">${L('beforeStore')}</p>
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
-    <div class="step-head" style="margin-top:22px;">
-      <h1 style="font-size:19px;">${L('whichStore')}</h1>
+    ${trend ? `<p class="yaya-line yaya-line-story">${trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)}</p>` : ''}
+    <div class="step-head" style="margin-top:20px;">
+      <h1 style="font-size:19px;">${L('askSucursal')}</h1>
     </div>
     <div class="pick-list">
       ${sucursales.map(s => `
@@ -306,16 +331,30 @@ function renderSucursalBriefing() {
   const canPrev = sucSeries.some(r => r.p < periodo);
   const canNext = sucSeries.some(r => r.p > periodo);
 
+  const topCat = sucRow && sucRow.cat && sucRow.cat.length ? sucRow.cat[0].cat : null;
+
   return `
     <div class="period-nav">
       <button class="period-arrow" id="periodPrev" ${canPrev ? '' : 'disabled'}>‹</button>
       <span class="period-label">${periodoLabelI18n(periodo, state.lang)}</span>
       <button class="period-arrow" id="periodNext" ${canNext ? '' : 'disabled'}>›</button>
     </div>
+    <p class="yaya-line">${L('beforeIndicators')}</p>
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
     ${sucRow ? renderStoreCard(sucRow) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
+    ${topCat ? `<p class="yaya-line yaya-line-story">${L('topDriver', titleCase(topCat))}</p>` : ''}
     ${renderRecommendationCard(sucRow)}
+    ${renderClosingCard()}
   `;
+}
+
+function renderClosingCard() {
+  return `
+    <div class="card closing-card">
+      <div class="closing-title">${L('closingTitle')}</div>
+      <div class="closing-body">${L('closingBody')}</div>
+      <button class="another-store-btn" id="anotherStoreBtn">${L('anotherStore')}</button>
+    </div>`;
 }
 
 function renderStoreCard(sucRow) {
@@ -326,7 +365,6 @@ function renderStoreCard(sucRow) {
 
   const catEntries = sucRow.cat || [];
   const totalCatUnits = catEntries.reduce((s, c) => s + c.u, 0) || 1;
-  const topCatNames = catEntries.slice(0, 3).map(c => c.cat).join(', ');
 
   return `
     <div class="card store-card">
@@ -347,10 +385,10 @@ function renderStoreCard(sucRow) {
       </div>
       ${catEntries.length ? `
         <div class="chip-row">
-          <span class="chip-row-label">${L('concentratedIn')}: <strong>${titleCase(topCatNames)}</strong></span>
-          <div class="chips">
-            ${catEntries.map(c => `<span class="chip">${c.cat} · ${(c.u / totalCatUnits * 100).toFixed(0)}%</span>`).join('')}
-          </div>
+          <span class="chip-row-label">${L('concentratedIn')}...</span>
+          <ul class="cat-list">
+            ${catEntries.map(c => `<li>${titleCase(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span></li>`).join('')}
+          </ul>
         </div>` : ''}
       ${sucRow.fam && sucRow.fam.length ? `
         <div class="chip-row">
@@ -447,6 +485,14 @@ function attachHandlers() {
   const nextBtn = document.getElementById('periodNext');
   if (prevBtn) prevBtn.addEventListener('click', () => shiftPeriod(-1));
   if (nextBtn) nextBtn.addEventListener('click', () => shiftPeriod(1));
+
+  const anotherStoreBtn = document.getElementById('anotherStoreBtn');
+  if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', () => {
+    state.sucursal = null;
+    state.periodo = null;
+    state.step = 'cuenta';
+    render();
+  });
 
   const btnUpload = document.getElementById('btnUpload');
   const modal = document.getElementById('uploadModal');

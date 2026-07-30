@@ -56,7 +56,25 @@ const I18N = {
     recoUn: (label) => `${label} lidera la venta de esta sucursal. Vale la pena preguntar cómo va la rotación en el resto de las unidades de negocio.`,
     recoCat: (cat) => `${cat} puede ser un buen punto de partida para la visita.`,
     recoLowWoh: (fam) => `${fam} tiene el inventario bajo frente a su venta — vale la pena revisar si conviene reabastecer.`,
-    changeName: 'Cambiar nombre / ícono'
+    changeName: 'Cambiar nombre / ícono',
+    greetingCardTitle: (name) => `Hola ${name} 👋`,
+    greetingCardBody: 'Soy Yaya. Ya revisé la información de tus clientes para hoy. Vamos a preparar juntos cada visita.',
+    continueBtn: 'Empezar',
+    confirmRegion: (r) => `Perfecto, hoy estaremos en ${r}.`,
+    confirmPais: (p) => `Iremos a ${p}.`,
+    confirmCliente: (c) => `Visitaremos ${c}.`,
+    askRegion: '¿Qué región visitaremos hoy?',
+    askPais: '¿Qué país visitaremos?',
+    askCliente: '¿Qué cliente visitaremos?',
+    askSucursal: '¿A qué sucursal iremos ahora?',
+    beforeStore: 'Antes de entrar a la tienda, te comparto un resumen rápido de la cuenta.',
+    beforeIndicators: 'Esto es lo más importante que deberías saber antes de comenzar la visita.',
+    closingTitle: 'Listo, ya estás preparada para esta visita.',
+    closingBody: 'Cuando quieras, seguimos con la siguiente tienda.',
+    anotherStore: 'Ver otra sucursal',
+    trendPositive: (n) => `La cuenta mantiene una tendencia positiva durante los últimos ${n} meses.`,
+    trendNegative: (n) => `La cuenta viene desacelerando durante los últimos ${n} meses.`,
+    topDriver: (cat) => `${cat} continúa siendo el principal impulsor de esta sucursal.`
   },
   en: {
     boot: 'Getting the tour ready…',
@@ -111,7 +129,25 @@ const I18N = {
     recoUn: (label) => `${label} leads this store\'s sales. Worth asking how the rest of the business units are rotating.`,
     recoCat: (cat) => `${cat} could be a good opener for the visit.`,
     recoLowWoh: (fam) => `${fam} is low on inventory relative to its sales — worth checking if it needs restocking.`,
-    changeName: 'Change name / icon'
+    changeName: 'Change name / icon',
+    greetingCardTitle: (name) => `Hi ${name} 👋`,
+    greetingCardBody: 'I\'m Yaya. I\'ve already gone through your accounts for today. Let\'s prep each visit together.',
+    continueBtn: 'Start',
+    confirmRegion: (r) => `Great, we\'re in ${r} today.`,
+    confirmPais: (p) => `Heading to ${p}.`,
+    confirmCliente: (c) => `We\'ll visit ${c}.`,
+    askRegion: 'Which region are we visiting today?',
+    askPais: 'Which country?',
+    askCliente: 'Which account are we visiting?',
+    askSucursal: 'Which store are we heading to now?',
+    beforeStore: 'Before we go in, here\'s a quick rundown of the account.',
+    beforeIndicators: 'Here\'s the most important thing to know before starting the visit.',
+    closingTitle: 'You\'re ready for this visit.',
+    closingBody: 'Whenever you\'re ready, let\'s move on to the next store.',
+    anotherStore: 'See another store',
+    trendPositive: (n) => `The account has kept a positive trend for the last ${n} months.`,
+    trendNegative: (n) => `The account has been slowing down for the last ${n} months.`,
+    topDriver: (cat) => `${cat} continues to be the main driver in this store.`
   }
 };
 
