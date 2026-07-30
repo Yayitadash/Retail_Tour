@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Retail Tour · Yaya</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --ink: #14161C;
+    --ink-soft: #1E2129;
+    --paper: #F7F5F0;
+    --paper-card: #FFFFFF;
+    --line: #E4E0D6;
+    --text: #1E2129;
+    --text-soft: #6B6A62;
+    --amber: #D9A63C;
+    --clay: #B85C3E;
+    --green: #3C8B62;
+    --red: #9C3B3B;
+    --radius: 14px;
+    --font-display: 'Oswald', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 60px rgba(0,0,0,0.4);
+  }
+
+  /* ---------- Boot ---------- */
+  .boot-screen {
+    height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--ink); color: var(--paper); gap: 16px;
+  }
+  .boot-mark {
+    font-family: var(--font-display); font-weight: 700; font-size: 42px; letter-spacing: 2px;
+    border: 3px solid var(--amber); color: var(--amber); padding: 10px 18px; border-radius: 10px;
+  }
+  .boot-text { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.5px; color: #9A968A; }
+
+  /* ---------- Topbar ---------- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--ink); color: var(--paper); padding: 16px 18px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--ink);
+    background: var(--amber); padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px;
+  }
+  .brand-name { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: 0.3px; }
+  .upload-btn {
+    background: transparent; border: 1px solid #3A3D46; color: #C9C6BB; font-family: var(--font-body);
+    font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .upload-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* ---------- Breadcrumb ---------- */
+  .breadcrumb {
+    display: flex; align-items: center; gap: 6px; padding: 10px 18px; background: var(--ink-soft);
+    overflow-x: auto; white-space: nowrap;
+  }
+  .breadcrumb button {
+    background: none; border: none; color: #ABA8A0; font-family: var(--font-body); font-size: 12.5px;
+    font-weight: 600; padding: 4px 2px; cursor: pointer;
+  }
+  .breadcrumb button:last-child { color: var(--amber); }
+  .breadcrumb .sep { color: #4A4D57; font-size: 12px; }
+
+  /* ---------- View ---------- */
+  .view { flex: 1; padding: 22px 18px 40px; }
+
+  .step-head h1 {
+    font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0 0 4px; color: var(--text);
+    letter-spacing: 0.2px;
+  }
+  .step-sub { font-size: 14px; color: var(--text-soft); margin: 0 0 18px; }
+
+  /* ---------- Card grid (region/pais) ---------- */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  .pick-card {
+    background: var(--paper-card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 16px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+    transition: border-color .15s, transform .15s;
+  }
+  .pick-card:hover { border-color: var(--amber); transform: translateY(-1px); }
+  .pick-title { font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--text); }
+  .pick-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-soft); }
+
+  /* ---------- Pick list (cliente/sucursal) ---------- */
+  .pick-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .pick-row {
+    background: var(--paper-card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; text-align: left; width: 100%;
+  }
+  .pick-row:hover { border-color: var(--amber); }
+  .pick-row-title { font-size: 14.5px; font-weight: 600; color: var(--text); }
+  .chevron { color: var(--text-soft); font-size: 18px; }
+  .mini-badge {
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: #fff;
+    background: var(--c); padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+  }
+
+  /* ---------- Period nav ---------- */
+  .period-nav {
+    display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 18px;
+  }
+  .period-arrow {
+    background: var(--paper-card); border: 1px solid var(--line); border-radius: 50%;
+    width: 34px; height: 34px; font-size: 17px; cursor: pointer; color: var(--text);
+  }
+  .period-arrow:disabled { opacity: 0.3; cursor: default; }
+  .period-label { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: 0.3px; }
+
+  /* ---------- Cards (briefing) ---------- */
+  .card {
+    background: var(--paper-card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; margin-bottom: 12px;
+  }
+  .muted-card { color: var(--text-soft); font-size: 13.5px; text-align: center; }
+
+  .classif-card { border-left: 5px solid var(--c); }
+  .classif-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .classif-label { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--c); }
+  .classif-sub { font-size: 13px; color: var(--text-soft); line-height: 1.5; }
+  .classif-empty .classif-label { color: var(--text-soft); font-size: 15px; }
+
+  .form-strip { display: flex; gap: 4px; }
+  .form-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; }
+
+  .stats-title { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--text-soft); margin-bottom: 12px; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stat-value { font-family: var(--font-mono); font-weight: 600; font-size: 20px; color: var(--text); }
+  .stat-value.stat-pos { color: var(--green); }
+  .stat-value.stat-neg { color: var(--red); }
+  .stat-label { font-size: 11.5px; color: var(--text-soft); margin-top: 2px; }
+
+  .store-totals { display: flex; gap: 14px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-soft); margin-bottom: 14px; flex-wrap: wrap; }
+  .store-totals span { background: var(--paper); border-radius: 6px; padding: 4px 8px; }
+
+  .un-bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .un-bar-row { display: flex; align-items: center; gap: 8px; }
+  .un-bar-label { font-size: 12px; font-weight: 600; width: 66px; flex-shrink: 0; color: var(--text); }
+  .un-bar-track { flex: 1; background: var(--paper); border-radius: 6px; height: 8px; overflow: hidden; }
+  .un-bar-fill { background: var(--amber); height: 100%; border-radius: 6px; }
+  .un-bar-pct { font-family: var(--font-mono); font-size: 11px; color: var(--text-soft); width: 30px; text-align: right; }
+
+  .chip-row { margin-top: 10px; }
+  .chip-row-label { font-size: 11px; color: var(--text-soft); display: block; margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: var(--ink); color: var(--paper);
+    padding: 4px 9px; border-radius: 20px;
+  }
+  .chip-outline { background: transparent; border: 1px solid var(--line); color: var(--text); }
+
+  .reco-card { background: #FBF3E4; border-color: #EAD9AF; }
+  .reco-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .reco-list li { font-size: 13.5px; line-height: 1.5; color: var(--text); }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(20,22,28,0.6); display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 20px;
+  }
+  .modal-backdrop.hidden { display: none; }
+  .modal { background: var(--paper-card); border-radius: var(--radius); padding: 20px; max-width: 400px; width: 100%; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; font-family: var(--font-display); font-weight: 600; font-size: 17px; margin-bottom: 10px; }
+  .modal-close { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--text-soft); }
+  .modal-copy { font-size: 13px; color: var(--text-soft); line-height: 1.5; margin-bottom: 14px; }
+  #fileInput { width: 100%; font-size: 13px; }
+  .upload-status { margin-top: 12px; font-size: 12.5px; color: var(--text-soft); font-family: var(--font-mono); }
+
+  .error-screen { padding: 40px 24px; text-align: center; color: var(--paper); }
+  .error-detail { font-family: var(--font-mono); font-size: 12px; color: #C9C6BB; margin-top: 8px; }
+
+  @media (max-width: 380px) {
+    .card-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Welcome / Yaya ---------- */
+  .welcome-screen {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 40px 24px; text-align: center; background: var(--paper);
+  }
+  .welcome-avatar-big { width: 96px; height: 96px; margin-bottom: 18px; border-radius: 50%; overflow: hidden; }
+  .welcome-avatar-big .yaya-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .welcome-title { font-family: var(--font-display); font-weight: 600; font-size: 24px; margin: 0 0 6px; }
+  .welcome-sub { font-size: 14px; color: var(--text-soft); margin: 0 0 24px; max-width: 300px; }
+  .welcome-input {
+    width: 100%; max-width: 280px; padding: 13px 16px; border-radius: 10px; border: 1px solid var(--line);
+    font-family: var(--font-body); font-size: 15px; margin-bottom: 24px; background: var(--paper-card);
+  }
+  .welcome-input:focus { outline: none; border-color: var(--amber); }
+  .start-btn {
+    background: var(--ink); color: var(--paper); font-family: var(--font-display); font-weight: 600; font-size: 15px;
+    padding: 13px 32px; border: none; border-radius: 10px; cursor: pointer; letter-spacing: 0.3px; margin-top: 6px;
+  }
+  .start-btn:hover { background: var(--amber); color: var(--ink); }
+  .welcome-label { font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .yaya-mini { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; border: none; padding: 0; cursor: pointer; flex-shrink: 0; }
+  .yaya-mini .yaya-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; }
+  .lang-toggle {
+    background: transparent; border: 1px solid #3A3D46; color: #C9C6BB; font-family: var(--font-mono);
+    font-size: 11.5px; font-weight: 600; padding: 6px 9px; border-radius: 8px; cursor: pointer;
+  }
+  .lang-toggle:hover { border-color: var(--amber); color: var(--amber); }
+  .settings-btn {
+    background: transparent; border: 1px solid #3A3D46; color: #C9C6BB; font-size: 14px;
+    padding: 6px 10px; border-radius: 8px; cursor: pointer; line-height: 1;
+  }
+  .settings-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .upload-btn { font-size: 15px; padding: 6px 11px; }
+
+  .yaya-greeting { font-size: 13px; color: var(--amber); font-weight: 600; margin: 0 0 8px; }
+
+  /* ---------- Family list (con $ y WOH) ---------- */
+  .fam-list { display: flex; flex-direction: column; gap: 8px; }
+  .fam-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--paper); border-radius: 8px; padding: 8px 10px;
+  }
+  .fam-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .fam-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-soft); white-space: nowrap; }
+
+  /* ---------- Yaya speech bubbles ---------- */
+  .yaya-bubble { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+  .yaya-bubble-avatar { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; flex-shrink: 0; margin-top: 2px; }
+  .yaya-bubble-avatar .yaya-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .yaya-bubble-text {
+    font-size: 13.5px; color: var(--text); line-height: 1.5; padding: 10px 14px;
+    background: #EFEBE0; border-radius: 4px 14px 14px 14px; flex: 1;
+  }
+  .yaya-bubble-text.yaya-bubble-story { background: transparent; padding: 6px 0 0 2px; color: var(--text-soft); font-style: italic; }
+
+  /* ---------- Cat list (negocio concentrado en...) ---------- */
+  .cat-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--text); line-height: 1.7; }
+  .cat-pct { font-family: var(--font-mono); color: var(--text-soft); font-size: 11.5px; }
+
+  /* ---------- Closing card ---------- */
+  .closing-card { background: var(--ink); border-color: var(--ink); text-align: center; padding: 22px 18px; }
+  .closing-title { font-family: var(--font-display); font-weight: 600; font-size: 16px; color: var(--paper); margin-bottom: 4px; }
+  .closing-body { font-size: 13px; color: #ABA8A0; margin-bottom: 16px; }
+  .another-store-btn {
+    background: var(--amber); color: var(--ink); border: none; border-radius: 8px; padding: 10px 20px;
+    font-family: var(--font-display); font-weight: 600; font-size: 13.5px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="engine.js"></script>
+  <script src="identity.js"></script>
+  <script src="i18n.js"></script>
+  <script src="data.js"></script>
+  <script src="upload.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
