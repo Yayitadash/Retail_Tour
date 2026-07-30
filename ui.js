@@ -45,6 +45,14 @@ function titleCase(s) {
 }
 function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
 
+function yayaBubble(text, extraClass) {
+  return `
+    <div class="yaya-bubble">
+      <div class="yaya-bubble-avatar">${getYayaAvatar()}</div>
+      <div class="yaya-bubble-text ${extraClass || ''}">${text}</div>
+    </div>`;
+}
+
 // ---------- Boot ----------
 async function boot() {
   if (!state.user) {
@@ -130,7 +138,7 @@ function render() {
         <span class="brand-name">Retail Tour</span>
       </div>
       <div class="topbar-actions">
-        <button class="yaya-mini" id="yayaMini" title="${L('changeName')}">${getYayaAvatar()}</button>
+        <button class="settings-btn" id="settingsBtn" title="${L('changeName')}">⚙</button>
         <button class="lang-toggle" id="langToggle">${state.lang.toUpperCase()}</button>
         <button class="upload-btn" id="btnUpload" title="${L('update')}">⇪</button>
       </div>
@@ -159,7 +167,7 @@ function renderRegionStep() {
   const regions = Object.keys(state.nav);
   return `
     <div class="step-head">
-      <p class="yaya-greeting">${L('greeting', state.user.name.split(' ')[0])}</p>
+      ${yayaBubble(L('greeting', state.user.name.split(' ')[0]))}
       <h1>${L('askRegion')}</h1>
     </div>
     <div class="card-grid">
@@ -177,7 +185,7 @@ function renderPaisStep() {
   const paises = Object.keys(state.nav[state.region]).sort();
   return `
     <div class="step-head">
-      <p class="yaya-greeting">${L('confirmRegion', REGION_LABELS[state.region] || state.region)}</p>
+      ${yayaBubble(L('confirmRegion', REGION_LABELS[state.region] || state.region))}
       <h1>${L('askPais')}</h1>
     </div>
     <div class="card-grid">
@@ -195,7 +203,7 @@ function renderClienteStep() {
   const clientes = Object.keys(state.nav[state.region][state.pais]).sort();
   return `
     <div class="step-head">
-      <p class="yaya-greeting">${L('confirmPais', titleCase(state.pais))}</p>
+      ${yayaBubble(L('confirmPais', titleCase(state.pais)))}
       <h1>${L('askCliente')}</h1>
     </div>
     <div class="pick-list">
@@ -234,17 +242,17 @@ function renderCuentaStep() {
 
   return `
     <div class="step-head">
-      <p class="yaya-greeting">${L('confirmCliente', titleCase(state.cliente))}</p>
+      ${yayaBubble(L('confirmCliente', titleCase(state.cliente)))}
     </div>
     <div class="period-nav">
       <button class="period-arrow" id="periodPrev" ${canPrev ? '' : 'disabled'}>‹</button>
       <span class="period-label">${periodoLabelI18n(periodo, state.lang)}</span>
       <button class="period-arrow" id="periodNext" ${canNext ? '' : 'disabled'}>›</button>
     </div>
-    <p class="yaya-line">${L('beforeStore')}</p>
+    ${yayaBubble(L('beforeStore'))}
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
-    ${trend ? `<p class="yaya-line yaya-line-story">${trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)}</p>` : ''}
+    ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months), 'yaya-bubble-story') : ''}
     <div class="step-head" style="margin-top:20px;">
       <h1 style="font-size:19px;">${L('askSucursal')}</h1>
     </div>
@@ -340,10 +348,10 @@ function renderSucursalBriefing() {
       <span class="period-label">${periodoLabelI18n(periodo, state.lang)}</span>
       <button class="period-arrow" id="periodNext" ${canNext ? '' : 'disabled'}>›</button>
     </div>
-    <p class="yaya-line">${L('beforeIndicators')}</p>
+    ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
     ${sucRow ? renderStoreCard(sucRow) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
-    ${topCat ? `<p class="yaya-line yaya-line-story">${L('topDriver', titleCase(topCat))}</p>` : ''}
+    ${topCat ? yayaBubble(L('topDriver', titleCase(topCat)), 'yaya-bubble-story') : ''}
     ${renderRecommendationCard(sucRow)}
     ${renderClosingCard()}
   `;
@@ -510,8 +518,8 @@ function attachHandlers() {
     render();
   });
 
-  const yayaMini = document.getElementById('yayaMini');
-  if (yayaMini) yayaMini.addEventListener('click', () => {
+  const settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.addEventListener('click', () => {
     renderWelcome();
   });
 }
