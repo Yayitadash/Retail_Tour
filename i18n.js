@@ -52,6 +52,8 @@ const I18N = {
     familiesIn: 'Familias/Siluetas',
     businessUnitsIn: 'Unidades de negocio',
     tapToExplore: 'Toca para ver el detalle',
+    whatIconsMean: '¿Qué significa cada ícono?',
+    hideIconsMean: 'Ocultar significado de íconos',
     recoTemplates: {
       'Las Estrellas': 'La cuenta mantiene un ritmo sobresaliente. Buen momento para proponer ampliar el surtido en las familias de mejor rotación.',
       'Las Aceleradas': 'La demanda crece más rápido que el inventario disponible. Vale la pena revisar si el abastecimiento alcanza para sostenerla.',
@@ -132,6 +134,8 @@ const I18N = {
     familiesIn: 'Families/Silhouettes',
     businessUnitsIn: 'Business units',
     tapToExplore: 'Tap to see the detail',
+    whatIconsMean: 'What does each icon mean?',
+    hideIconsMean: 'Hide icon meanings',
     recoTemplates: {
       'Las Estrellas': 'The account is on an outstanding streak. Good time to suggest expanding the assortment in the best-rotating families.',
       'Las Aceleradas': 'Demand is growing faster than available inventory. Worth checking whether supply can keep up.',

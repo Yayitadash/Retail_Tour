@@ -9,6 +9,7 @@ const state = {
   periodo: null,
   selectedUn: null, selectedCat: null,
   clasifFilter: null,
+  clasifLegendOpen: false,
   lang: loadLang(),
   user: loadUser(),
   loading: true
@@ -231,6 +232,19 @@ function renderClienteStep() {
       <h1>${L('askCliente')}</h1>
     </div>
     <div class="clasif-filter-row">${filterRow}</div>
+    <button class="clasif-legend-toggle" id="clasifLegendToggle">${state.clasifLegendOpen ? L('hideIconsMean') : L('whatIconsMean')}</button>
+    ${state.clasifLegendOpen ? `
+      <div class="clasif-legend">
+        ${CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
+          <div class="clasif-legend-item">
+            <span class="clasif-legend-icon" style="--c:${CLASIFICACIONES[k].color}">${CLASIFICACIONES[k].icon}</span>
+            <div>
+              <div class="clasif-legend-name" style="color:${CLASIFICACIONES[k].color}">${classifLabel(k, state.lang)}</div>
+              <div class="clasif-legend-desc">${classifDesc(k, state.lang)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>` : ''}
     <div class="pick-list">
       ${visibles.map(({ c, clasif }) => {
         const badge = clasif
@@ -582,7 +596,7 @@ function attachHandlers() {
       const kind = el.getAttribute('data-pick');
       const value = el.getAttribute('data-value');
       if (kind === 'region') { state.region = value; state.step = 'pais'; }
-      else if (kind === 'pais') { state.pais = value; state.clasifFilter = null; state.step = 'cliente'; }
+      else if (kind === 'pais') { state.pais = value; state.clasifFilter = null; state.clasifLegendOpen = false; state.step = 'cliente'; }
       else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'cuenta'; }
       else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'sucursal'; }
       render();
@@ -593,7 +607,7 @@ function attachHandlers() {
       const target = el.getAttribute('data-nav');
       state.step = target;
       state.periodo = null;
-      state.clasifFilter = null;
+      state.clasifFilter = null; state.clasifLegendOpen = false;
       if (target === 'region') { state.pais = state.cliente = state.sucursal = null; }
       if (target === 'pais') { state.cliente = state.sucursal = null; }
       if (target === 'cuenta') { state.sucursal = null; }
@@ -620,6 +634,12 @@ function attachHandlers() {
       state.clasifFilter = state.clasifFilter === k ? null : k;
       render();
     });
+  });
+
+  const clasifLegendToggle = document.getElementById('clasifLegendToggle');
+  if (clasifLegendToggle) clasifLegendToggle.addEventListener('click', () => {
+    state.clasifLegendOpen = !state.clasifLegendOpen;
+    render();
   });
 
   document.querySelectorAll('[data-select-un]').forEach(el => {
