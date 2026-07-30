@@ -217,7 +217,8 @@ function renderClienteStep() {
   });
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
-  const filterButtons = CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
+  const keysToShow = state.clasifFilter ? [state.clasifFilter] : CLASIF_ORDER.filter(k => presentClasifs.has(k));
+  const filterButtons = keysToShow.map(k => `
     <button class="clasif-long-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}">
       <span class="clasif-long-icon">${CLASIFICACIONES[k].icon}</span>
       <span class="clasif-long-text">
@@ -236,6 +237,11 @@ function renderClienteStep() {
       <h1>${L('askCliente')}</h1>
     </div>
     <div class="clasif-long-list">${filterButtons}</div>
+    ${state.clasifFilter ? `
+      <div class="filter-status-row">
+        <span class="filter-status-count">${visibles.length} ${visibles.length === 1 ? L('accountSingular') : L('accounts')}</span>
+        <button class="filter-clear-btn" id="filterClearBtn">${L('seeAllAccounts')}</button>
+      </div>` : ''}
     <div class="pick-list">
       ${visibles.map(({ c, clasif }) => {
         const badge = clasif
@@ -625,6 +631,12 @@ function attachHandlers() {
       state.clasifFilter = state.clasifFilter === k ? null : k;
       render();
     });
+  });
+
+  const filterClearBtn = document.getElementById('filterClearBtn');
+  if (filterClearBtn) filterClearBtn.addEventListener('click', () => {
+    state.clasifFilter = null;
+    render();
   });
 
   document.querySelectorAll('[data-select-un]').forEach(el => {
