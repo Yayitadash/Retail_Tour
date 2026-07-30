@@ -38,6 +38,7 @@ const I18N = {
     monthWoh: 'WOH del mes',
     forConversation: 'Para la conversación con el cliente',
     noMovement: (p) => `Esta sucursal no tiene movimiento en ${p}.`,
+    noMovementShort: 'sin venta',
     noData: 'No hay data para esta cuenta.',
     uploadTitle: 'Actualizar datos',
     uploadCopy: 'Sube el archivo del mes nuevo (mismo formato que la base original). Se procesa aquí mismo y queda disponible en todos tus dispositivos.',
@@ -117,6 +118,7 @@ const I18N = {
     monthWoh: 'This month\'s WOH',
     forConversation: 'For the conversation with the client',
     noMovement: (p) => `This store had no movement in ${p}.`,
+    noMovementShort: 'no sales',
     noData: 'No data for this account.',
     uploadTitle: 'Update data',
     uploadCopy: 'Upload the new month\'s file (same format as the original base). It\'s processed right here and becomes available on all your devices.',
@@ -191,4 +193,27 @@ const CLASIF_LABELS_EN = {
 function classifLabel(key, lang) {
   if (!key) return null;
   return lang === 'en' ? (CLASIF_LABELS_EN[key] || key) : key;
+}
+
+const CLASIF_DESC = {
+  es: {
+    'Las Estrellas': 'Buena venta y buen inventario. El balance ideal de la cartera.',
+    'Las Aceleradas': 'Volando en ventas, necesitan inventario ya.',
+    'Las Robustas': 'Buena venta pero acumulando stock.',
+    'Zona de Riesgo': 'Crecimiento bajo con desequilibrios en el mix de inventario.',
+    'Desabastecidas': 'Cliente sin stock para lograr buenos resultados de venta.',
+    'Riesgo Crítico': 'Ventas contraídas con exceso de inventario en producto de lento movimiento.'
+  },
+  en: {
+    'Las Estrellas': 'Strong sales and healthy inventory. The ideal balance for the portfolio.',
+    'Las Aceleradas': 'Sales are flying, inventory needs to catch up now.',
+    'Las Robustas': 'Good sales but inventory is piling up.',
+    'Zona de Riesgo': 'Low growth with an unbalanced inventory mix.',
+    'Desabastecidas': 'No stock to support good sales results.',
+    'Riesgo Crítico': 'Sales are shrinking with excess inventory in slow-moving product.'
+  }
+};
+function classifDesc(key, lang) {
+  if (!key) return null;
+  return (CLASIF_DESC[lang] || CLASIF_DESC.es)[key] || '';
 }

@@ -216,7 +216,7 @@ function renderClienteStep() {
         const last = cd && cd.hist.length ? cd.hist[cd.hist.length - 1] : null;
         const metrics = cd && last ? computeMetricsForPeriod(cd.hist, last.p) : null;
         const badge = metrics && metrics.clasif
-          ? `<span class="mini-badge" style="--c:${CLASIFICACIONES[metrics.clasif].color}">${classifLabel(metrics.clasif, state.lang)}</span>`
+          ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[metrics.clasif].color}" title="${classifLabel(metrics.clasif, state.lang)}">${CLASIFICACIONES[metrics.clasif].icon}</span>`
           : '';
         return `
         <button class="pick-row" data-pick="cliente" data-value="${escapeAttr(c)}">
@@ -257,16 +257,20 @@ function renderCuentaStep() {
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
     ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months), 'yaya-bubble-story') : ''}
-    <div class="step-head" style="margin-top:20px;">
-      <h1 style="font-size:19px;">${L('askSucursal')}</h1>
-    </div>
+    ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
-      ${sucursales.map(s => `
+      ${sucursales.map(s => {
+        const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s]) || [];
+        const sucRow = sucSeries.find(r => r.p === periodo);
+        return `
         <button class="pick-row" data-pick="sucursal" data-value="${escapeAttr(s)}">
           <span class="pick-row-title">${titleCase(s)}</span>
-          <span class="chevron">›</span>
-        </button>
-      `).join('')}
+          <span class="pick-row-right">
+            ${sucRow ? `<span class="pick-row-sales">${fmtMoney(sucRow.v)}</span>` : `<span class="pick-row-sales pick-row-sales-empty">${L('noMovementShort')}</span>`}
+            <span class="chevron">›</span>
+          </span>
+        </button>`;
+      }).join('')}
     </div>
   `;
 }
@@ -281,6 +285,7 @@ function renderClassificationCard(metrics, streak, form) {
   }
   const c = CLASIFICACIONES[metrics.clasif];
   const label = classifLabel(metrics.clasif, state.lang);
+  const desc = classifDesc(metrics.clasif, state.lang);
   let streakText = '';
   if (streak) {
     if (streak.meses > 1) streakText = L('streakMonths', streak.meses, label);
@@ -296,9 +301,10 @@ function renderClassificationCard(metrics, streak, form) {
   return `
     <div class="card classif-card" style="--c:${c.color}">
       <div class="classif-top">
-        <div class="classif-label">${label}</div>
+        <div class="classif-label"><span class="classif-icon">${c.icon}</span> ${label}</div>
         <div class="form-strip">${formDots}</div>
       </div>
+      <div class="classif-desc">${desc}</div>
       <div class="classif-sub">${streakText}</div>
     </div>`;
 }
