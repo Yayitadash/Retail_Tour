@@ -1,0 +1,146 @@
+// ============================================================
+// RETAIL TOUR — Español / Inglés
+// ============================================================
+
+const I18N = {
+  es: {
+    boot: 'Preparando el recorrido…',
+    welcomeTitle: '¿Cómo te llamas?',
+    welcomeSub: 'Yaya quiere saber con quién va a hacer el recorrido.',
+    namePlaceholder: 'Tu nombre',
+    chooseAvatar: 'Elige a Yaya',
+    startTour: 'Empezar el tour',
+    greeting: (name) => `Hola ${name}, Yaya está aquí para acompañarte en este tour.`,
+    whereToday: '¿A qué región vas hoy?',
+    stepStart: 'Selecciona para empezar el recorrido.',
+    whichCountry: '¿Qué país?',
+    whichAccount: '¿Qué cuenta vas a visitar?',
+    countries: 'países',
+    accounts: 'cuentas',
+    whichStore: '¿A qué sucursal vamos?',
+    update: 'Actualizar',
+    noClassif: 'Sin clasificación este mes',
+    noClassifSub: 'No hay suficiente venta o inventario registrado para clasificar la cuenta en este periodo.',
+    firstMonthAs: (c) => `Primer mes clasificado como ${c}.`,
+    streakMonths: (n, c) => `La cuenta acumula <strong>${n} meses consecutivos</strong> como ${c}.`,
+    changedFrom: (n, c) => `Cambió este mes, tras <strong>${n} meses</strong> como ${c}.`,
+    accountOverview: 'Cómo va la cuenta',
+    storeOverview: 'Cómo va esta sucursal',
+    growthUnits: 'Crecimiento unidades',
+    growthValor: 'Crecimiento $',
+    woh: 'Semanas de inventario',
+    avgMonthly: (n) => `Venta prom. mensual (${n}m)`,
+    whatSells: 'Qué vende esta sucursal',
+    units: 'unid.',
+    inInventory: 'en inventario',
+    concentratedIn: 'El negocio está concentrado en',
+    leadingFamilies: 'Familias líderes',
+    monthWoh: 'WOH del mes',
+    forConversation: 'Para la conversación con el cliente',
+    noMovement: (p) => `Esta sucursal no tiene movimiento en ${p}.`,
+    noData: 'No hay data para esta cuenta.',
+    uploadTitle: 'Actualizar datos',
+    uploadCopy: 'Sube el archivo del mes nuevo (mismo formato que la base original). Se procesa aquí mismo y queda disponible en todos tus dispositivos.',
+    processing: 'Procesando archivo…',
+    saving: (p) => `Guardando ${p}…`,
+    done: (p) => `Listo. Se actualizó ${p}.`,
+    unLabels: { FW: 'Calzado', APP: 'Ropa', EQ: 'Equipo', LIC: 'Licencias' },
+    recoTemplates: {
+      'Las Estrellas': 'La cuenta mantiene un ritmo sobresaliente. Buen momento para proponer ampliar el surtido en las familias de mejor rotación.',
+      'Las Aceleradas': 'La demanda crece más rápido que el inventario disponible. Vale la pena revisar si el abastecimiento alcanza para sostenerla.',
+      'Las Robustas': 'La cuenta crece con inventario amplio. Hay espacio para explorar categorías nuevas o menos trabajadas.',
+      'Zona de Riesgo': 'El inventario es alto frente a la demanda actual. Conviene entender juntos qué está frenando la rotación.',
+      'Desabastecidas': 'La demanda bajó y el inventario también está ajustado. Vale la pena revisar el surtido disponible en tienda.',
+      'Riesgo Crítico': 'Inventario elevado y demanda a la baja. Es un buen momento para una conversación abierta sobre el plan de surtido.'
+    },
+    recoUn: (label) => `${label} lidera la venta de esta sucursal. Vale la pena preguntar cómo va la rotación en el resto de las unidades de negocio.`,
+    recoCat: (cat) => `${cat} puede ser un buen punto de partida para la visita.`,
+    recoLowWoh: (fam) => `${fam} tiene el inventario bajo frente a su venta — vale la pena revisar si conviene reabastecer.`,
+    changeName: 'Cambiar nombre / ícono'
+  },
+  en: {
+    boot: 'Getting the tour ready…',
+    welcomeTitle: "What's your name?",
+    welcomeSub: 'Yaya wants to know who she’s touring with today.',
+    namePlaceholder: 'Your name',
+    chooseAvatar: 'Choose Yaya',
+    startTour: 'Start the tour',
+    greeting: (name) => `Hi ${name}, Yaya is here with you for this tour.`,
+    whereToday: 'Which region are you visiting today?',
+    stepStart: 'Pick one to start the tour.',
+    whichCountry: 'Which country?',
+    whichAccount: 'Which account are you visiting?',
+    countries: 'countries',
+    accounts: 'accounts',
+    whichStore: 'Which store are we going to?',
+    update: 'Update',
+    noClassif: 'Not classified this month',
+    noClassifSub: 'There isn’t enough recorded sales or inventory to classify this account this period.',
+    firstMonthAs: (c) => `First month classified as ${c}.`,
+    streakMonths: (n, c) => `The account has been <strong>${n} straight months</strong> as ${c}.`,
+    changedFrom: (n, c) => `Changed this month, after <strong>${n} months</strong> as ${c}.`,
+    accountOverview: 'How the account is doing',
+    storeOverview: 'How this store is doing',
+    growthUnits: 'Unit growth',
+    growthValor: '$ growth',
+    woh: 'Weeks of inventory',
+    avgMonthly: (n) => `Avg. monthly sales (${n}m)`,
+    whatSells: 'What this store sells',
+    units: 'units',
+    inInventory: 'in stock',
+    concentratedIn: 'The business is concentrated in',
+    leadingFamilies: 'Leading families',
+    monthWoh: 'This month\'s WOH',
+    forConversation: 'For the conversation with the client',
+    noMovement: (p) => `This store had no movement in ${p}.`,
+    noData: 'No data for this account.',
+    uploadTitle: 'Update data',
+    uploadCopy: 'Upload the new month\'s file (same format as the original base). It\'s processed right here and becomes available on all your devices.',
+    processing: 'Processing file…',
+    saving: (p) => `Saving ${p}…`,
+    done: (p) => `Done. ${p} was updated.`,
+    unLabels: { FW: 'Footwear', APP: 'Apparel', EQ: 'Equipment', LIC: 'Licensed' },
+    recoTemplates: {
+      'Las Estrellas': 'The account is on an outstanding streak. Good time to suggest expanding the assortment in the best-rotating families.',
+      'Las Aceleradas': 'Demand is growing faster than available inventory. Worth checking whether supply can keep up.',
+      'Las Robustas': 'The account is growing with healthy inventory. There\'s room to explore new or under-worked categories.',
+      'Zona de Riesgo': 'Inventory is high relative to current demand. Worth understanding together what\'s slowing rotation.',
+      'Desabastecidas': 'Demand dropped and inventory is also tight. Worth reviewing what\'s actually available in store.',
+      'Riesgo Crítico': 'High inventory and falling demand. A good moment for an open conversation about the assortment plan.'
+    },
+    recoUn: (label) => `${label} leads this store\'s sales. Worth asking how the rest of the business units are rotating.`,
+    recoCat: (cat) => `${cat} could be a good opener for the visit.`,
+    recoLowWoh: (fam) => `${fam} is low on inventory relative to its sales — worth checking if it needs restocking.`,
+    changeName: 'Change name / icon'
+  }
+};
+
+function t(lang, key, ...args) {
+  const dict = I18N[lang] || I18N.es;
+  const val = dict[key];
+  if (typeof val === 'function') return val(...args);
+  return val;
+}
+
+const MESES = {
+  es: ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
+  en: ['', 'January','February','March','April','May','June','July','August','September','October','November','December']
+};
+
+function periodoLabelI18n(p, lang) {
+  const y = Math.floor(p / 100), m = p % 100;
+  return `${MESES[lang][m]} ${y}`;
+}
+
+const CLASIF_LABELS_EN = {
+  'Las Estrellas': 'The Stars',
+  'Las Aceleradas': 'The Fast Movers',
+  'Las Robustas': 'The Steady Ones',
+  'Zona de Riesgo': 'Risk Zone',
+  'Desabastecidas': 'Understocked',
+  'Riesgo Crítico': 'Critical Risk'
+};
+function classifLabel(key, lang) {
+  if (!key) return null;
+  return lang === 'en' ? (CLASIF_LABELS_EN[key] || key) : key;
+}
