@@ -47,9 +47,12 @@ function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
 
 function yayaBubble(text, extraClass) {
   return `
-    <div class="yaya-bubble">
-      <div class="yaya-bubble-avatar">${getYayaAvatar()}</div>
-      <div class="yaya-bubble-text ${extraClass || ''}">${text}</div>
+    <div class="yaya-bubble" style="display:flex;align-items:flex-start;gap:8px;margin:0 0 14px;">
+      <div class="yaya-bubble-avatar" style="width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;">${getYayaAvatar()}</div>
+      <div class="yaya-bubble-content ${extraClass || ''}">
+        <div class="yaya-bubble-name">Yaya</div>
+        <div class="yaya-bubble-text">${text}</div>
+      </div>
     </div>`;
 }
 

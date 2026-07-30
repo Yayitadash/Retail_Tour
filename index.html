@@ -248,15 +248,19 @@
   .fam-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
   .fam-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-soft); white-space: nowrap; }
 
-  /* ---------- Yaya speech bubbles ---------- */
+  /* ---------- Yaya speech bubbles (estilo chat) ---------- */
   .yaya-bubble { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
-  .yaya-bubble-avatar { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; flex-shrink: 0; margin-top: 2px; }
+  .yaya-bubble-avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
   .yaya-bubble-avatar .yaya-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .yaya-bubble-text {
-    font-size: 13.5px; color: var(--text); line-height: 1.5; padding: 10px 14px;
-    background: #EFEBE0; border-radius: 4px 14px 14px 14px; flex: 1;
+  .yaya-bubble-content {
+    background: var(--paper-card); border-radius: 4px 14px 14px 14px; padding: 9px 13px 11px;
+    flex: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   }
-  .yaya-bubble-text.yaya-bubble-story { background: transparent; padding: 6px 0 0 2px; color: var(--text-soft); font-style: italic; }
+  .yaya-bubble-name { font-family: var(--font-display); font-weight: 600; font-size: 12px; color: var(--clay); margin-bottom: 2px; }
+  .yaya-bubble-text { font-size: 13.5px; color: var(--text); line-height: 1.45; }
+  .yaya-bubble-content.yaya-bubble-story { background: transparent; box-shadow: none; padding: 2px 0 0; }
+  .yaya-bubble-content.yaya-bubble-story .yaya-bubble-name { display: none; }
+  .yaya-bubble-content.yaya-bubble-story .yaya-bubble-text { color: var(--text-soft); font-style: italic; font-size: 13px; }
 
   /* ---------- Cat list (negocio concentrado en...) ---------- */
   .cat-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--text); line-height: 1.7; }
