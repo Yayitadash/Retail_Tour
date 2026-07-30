@@ -136,6 +136,14 @@
     display: flex; align-items: center; justify-content: center; border-radius: 50%;
     background: color-mix(in srgb, var(--c) 18%, transparent);
   }
+  .clasif-filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 18px; justify-content: center; }
+  .clasif-filter-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    font-size: 19px; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--c) 16%, var(--paper-card));
+  }
+  .clasif-filter-btn:hover { border-color: var(--c); }
+  .clasif-filter-btn.active { border-color: var(--c); background: color-mix(in srgb, var(--c) 30%, var(--paper-card)); }
 
   /* ---------- Period nav ---------- */
   .period-nav {

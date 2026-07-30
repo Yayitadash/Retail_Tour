@@ -8,6 +8,7 @@ const state = {
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
   selectedUn: null, selectedCat: null,
+  clasifFilter: null,
   lang: loadLang(),
   user: loadUser(),
   loading: true
@@ -203,20 +204,37 @@ function renderPaisStep() {
 }
 
 // ---------- Step: Cliente (elegir cuenta) ----------
+const CLASIF_ORDER = ['Las Estrellas', 'Las Aceleradas', 'Las Robustas', 'Zona de Riesgo', 'Desabastecidas', 'Riesgo Crítico'];
+
 function renderClienteStep() {
   const clientes = Object.keys(state.nav[state.region][state.pais]).sort();
+  const clientesConClasif = clientes.map(c => {
+    const cd = state.clientePeriodo[c];
+    const last = cd && cd.hist.length ? cd.hist[cd.hist.length - 1] : null;
+    const metrics = cd && last ? computeMetricsForPeriod(cd.hist, last.p) : null;
+    return { c, clasif: metrics ? metrics.clasif : null };
+  });
+
+  const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
+  const filterRow = CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
+    <button class="clasif-filter-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}" title="${classifLabel(k, state.lang)}">
+      ${CLASIFICACIONES[k].icon}
+    </button>`).join('');
+
+  const visibles = state.clasifFilter
+    ? clientesConClasif.filter(x => x.clasif === state.clasifFilter)
+    : clientesConClasif;
+
   return `
     <div class="step-head">
       ${yayaBubble(L('confirmPais', titleCase(state.pais)))}
       <h1>${L('askCliente')}</h1>
     </div>
+    <div class="clasif-filter-row">${filterRow}</div>
     <div class="pick-list">
-      ${clientes.map(c => {
-        const cd = state.clientePeriodo[c];
-        const last = cd && cd.hist.length ? cd.hist[cd.hist.length - 1] : null;
-        const metrics = cd && last ? computeMetricsForPeriod(cd.hist, last.p) : null;
-        const badge = metrics && metrics.clasif
-          ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[metrics.clasif].color}" title="${classifLabel(metrics.clasif, state.lang)}">${CLASIFICACIONES[metrics.clasif].icon}</span>`
+      ${visibles.map(({ c, clasif }) => {
+        const badge = clasif
+          ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[clasif].color}" title="${classifLabel(clasif, state.lang)}">${CLASIFICACIONES[clasif].icon}</span>`
           : '';
         return `
         <button class="pick-row" data-pick="cliente" data-value="${escapeAttr(c)}">
@@ -564,7 +582,7 @@ function attachHandlers() {
       const kind = el.getAttribute('data-pick');
       const value = el.getAttribute('data-value');
       if (kind === 'region') { state.region = value; state.step = 'pais'; }
-      else if (kind === 'pais') { state.pais = value; state.step = 'cliente'; }
+      else if (kind === 'pais') { state.pais = value; state.clasifFilter = null; state.step = 'cliente'; }
       else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'cuenta'; }
       else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'sucursal'; }
       render();
@@ -575,6 +593,7 @@ function attachHandlers() {
       const target = el.getAttribute('data-nav');
       state.step = target;
       state.periodo = null;
+      state.clasifFilter = null;
       if (target === 'region') { state.pais = state.cliente = state.sucursal = null; }
       if (target === 'pais') { state.cliente = state.sucursal = null; }
       if (target === 'cuenta') { state.sucursal = null; }
@@ -593,6 +612,14 @@ function attachHandlers() {
     state.selectedUn = null; state.selectedCat = null;
     state.step = 'cuenta';
     render();
+  });
+
+  document.querySelectorAll('[data-filter-clasif]').forEach(el => {
+    el.addEventListener('click', () => {
+      const k = el.getAttribute('data-filter-clasif');
+      state.clasifFilter = state.clasifFilter === k ? null : k;
+      render();
+    });
   });
 
   document.querySelectorAll('[data-select-un]').forEach(el => {
