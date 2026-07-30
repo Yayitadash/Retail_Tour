@@ -217,7 +217,7 @@ function renderClienteStep() {
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
   const filterRow = CLASIF_ORDER.filter(k => presentClasifs.has(k)).map(k => `
-    <button class="clasif-filter-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}" title="${classifLabel(k, state.lang)}">
+    <button class="clasif-filter-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}" title="${classifLabel(k, state.lang)} — ${classifDesc(k, state.lang)}">
       ${CLASIFICACIONES[k].icon}
     </button>`).join('');
 
@@ -234,7 +234,7 @@ function renderClienteStep() {
     <div class="pick-list">
       ${visibles.map(({ c, clasif }) => {
         const badge = clasif
-          ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[clasif].color}" title="${classifLabel(clasif, state.lang)}">${CLASIFICACIONES[clasif].icon}</span>`
+          ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[clasif].color}" title="${classifLabel(clasif, state.lang)} — ${classifDesc(clasif, state.lang)}">${CLASIFICACIONES[clasif].icon}</span>`
           : '';
         return `
         <button class="pick-row" data-pick="cliente" data-value="${escapeAttr(c)}">
