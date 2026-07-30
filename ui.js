@@ -285,6 +285,7 @@ function renderCuentaStep() {
     ${yayaBubble(L('beforeStore'))}
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
+    ${renderAccountRecoCard(metrics)}
     ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months), 'yaya-bubble-story') : ''}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
@@ -536,24 +537,28 @@ function renderDetailPanel(sucRow) {
   return '';
 }
 
+function renderAccountRecoCard(metrics) {
+  const templates = t(state.lang, 'recoTemplates');
+  if (!metrics || !metrics.clasif || !templates[metrics.clasif]) return '';
+  return `
+    <div class="card reco-card">
+      <div class="stats-title">${L('forConversation')}</div>
+      <p class="reco-single">${templates[metrics.clasif]}</p>
+    </div>`;
+}
+
 function renderRecommendationCard(sucRow) {
   const lines = buildRecommendations(sucRow);
   if (!lines.length) return '';
   return `
     <div class="card reco-card">
-      <div class="stats-title">${L('forConversation')}</div>
+      <div class="stats-title">${L('forThisStore')}</div>
       <ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
     </div>`;
 }
 
 function buildRecommendations(sucRow) {
   const lines = [];
-  const cd = state.clientePeriodo[state.cliente];
-  const fullHist = computeFullHistory(cd.hist);
-  const clientMetrics = computeMetricsForPeriod(cd.hist, state.periodo) || fullHist[fullHist.length - 1];
-  const templates = t(state.lang, 'recoTemplates');
-  if (clientMetrics && clientMetrics.clasif && templates[clientMetrics.clasif]) lines.push(templates[clientMetrics.clasif]);
-
   if (sucRow) {
     const unLabels = t(state.lang, 'unLabels');
     const unEntries = Object.entries(sucRow.un || {}).sort((a, b) => b[1].u - a[1].u);
