@@ -346,6 +346,10 @@ function renderStatsCard(metrics, title) {
       <div class="stats-title">${title}</div>
       <div class="stats-grid">
         <div class="stat">
+          <div class="stat-value">${fmtMoney(metrics.valor)}</div>
+          <div class="stat-label">${L('salesAmount')}</div>
+        </div>
+        <div class="stat">
           <div class="stat-value ${gClass(metrics.growthUnits)}">${fmtPct(metrics.growthUnits)}</div>
           <div class="stat-label">${L('growthUnits')}</div>
         </div>
@@ -738,14 +742,25 @@ async function handleFileUpload(e) {
     const parsed = await parseUploadedFile(file);
     if (!parsed.periodos.length) throw new Error('No periods found.');
     const labels = parsed.periodos.map(p => periodoLabelI18n(p, state.lang)).join(', ');
-    statusEl.textContent = L('saving', labels);
     const payloads = splitByPeriodo(parsed);
+
+    // Aplicamos los cambios en memoria de una vez (la app se ve actualizada al instante)
     for (const payload of payloads) {
-      await saveMonthlyUpload(payload);
       mergeClientePeriodo(state.clientePeriodo, payload.cliente_periodo);
       mergeSucursalPeriodo(state.sucursalPeriodo, payload.sucursal_periodo);
       mergeNav(state.nav, payload.nav);
     }
+
+    // Guardado en Firebase en paralelo, para que un archivo con muchos meses no se sienta lento
+    let done = 0;
+    statusEl.textContent = L('savingProgress', done, payloads.length);
+    await Promise.all(payloads.map(payload =>
+      saveMonthlyUpload(payload).then(() => {
+        done++;
+        statusEl.textContent = L('savingProgress', done, payloads.length);
+      })
+    ));
+
     statusEl.textContent = L('done', labels);
     setTimeout(() => { document.getElementById('uploadModal').classList.add('hidden'); render(); }, 1200);
   } catch (err) {
