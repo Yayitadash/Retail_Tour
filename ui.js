@@ -287,7 +287,7 @@ function renderCuentaStep() {
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
     ${renderAccountRecoCard(metrics)}
-    ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months), 'yaya-bubble-story') : ''}
+    ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
       ${sucursales.map(s => {
@@ -396,7 +396,7 @@ function renderSucursalBriefing() {
     ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
     ${sucRow ? renderStoreCard(sucRow) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
-    ${topCat ? yayaBubble(L('topDriver', catLabel(topCat)), 'yaya-bubble-story') : ''}
+    ${topCat ? yayaBubble(L('topDriver', catLabel(topCat))) : ''}
     ${renderRecommendationCard(sucRow)}
     ${renderClosingCard()}
   `;
