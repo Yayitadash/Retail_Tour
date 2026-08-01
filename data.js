@@ -32,16 +32,20 @@ async function fetchJSON(path) {
 }
 
 /**
- * Carga nav.json, cliente_periodo.json, sucursal_periodo.json y
+ * Carga nav.json, cliente_periodo.json, los 4 archivos de sucursal_periodo
+ * (partidos por región para no pasar el límite de 25MB de GitHub) y
  * los documentos de Firestore (monthly_uploads), y devuelve todo
  * fusionado en memoria.
  */
+const SUCURSAL_REGIONS = ['CEN', 'CAR', 'COL', 'VEN'];
+
 async function loadAllData() {
-  const [nav, clientePeriodo, sucursalPeriodo] = await Promise.all([
+  const [nav, clientePeriodo, ...sucursalParts] = await Promise.all([
     fetchJSON('./data/nav.json'),
     fetchJSON('./data/cliente_periodo.json'),
-    fetchJSON('./data/sucursal_periodo.json')
+    ...SUCURSAL_REGIONS.map(r => fetchJSON(`./data/sucursal_periodo_${r}.json`))
   ]);
+  const sucursalPeriodo = Object.assign({}, ...sucursalParts);
 
   let uploads = [];
   try {
