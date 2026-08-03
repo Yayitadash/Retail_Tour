@@ -545,21 +545,19 @@ function renderDetailPanel(sucRow) {
 function renderAccountRecoCard(metrics) {
   const templates = t(state.lang, 'recoTemplates');
   if (!metrics || !metrics.clasif || !templates[metrics.clasif]) return '';
-  return `
-    <div class="card reco-card">
-      <div class="stats-title">${L('forConversation')}</div>
-      <p class="reco-single">${templates[metrics.clasif]}</p>
-    </div>`;
+  return yayaBubble(`
+    <span class="yaya-bubble-heading">${L('forConversation')}</span>
+    ${templates[metrics.clasif]}
+  `);
 }
 
 function renderRecommendationCard(sucRow) {
   const lines = buildRecommendations(sucRow);
   if (!lines.length) return '';
-  return `
-    <div class="card reco-card">
-      <div class="stats-title">${L('forThisStore')}</div>
-      <ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
-    </div>`;
+  return yayaBubble(`
+    <span class="yaya-bubble-heading">${L('forThisStore')}</span>
+    <ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+  `);
 }
 
 function dominantGen(genObj) {
