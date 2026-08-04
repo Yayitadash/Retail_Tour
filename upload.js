@@ -59,6 +59,8 @@ async function parseUploadedFile(file) {
   const catUn = {};   // c->s->p->CAT->UN->{u,v}
   const catGen = {};  // c->s->p->CAT->GEN->{u,v}
   const catFam = {};  // c->s->p->CAT->fam->{u,v,e}
+  const unHistAcc = {};   // c->s->UN->periodo->{u,v}  (historial completo, no solo top-N)
+  const catHistAcc = {};  // c->s->CAT->periodo->{u,v}
   const periodosVistos = new Set();
   const navDelta = {};
 
@@ -141,6 +143,8 @@ async function parseUploadedFile(file) {
     bump(catUn, [cliente, sucursal, periodo, cat, un], unidades, valor, 0);
     bump(catGen, [cliente, sucursal, periodo, cat, gen], unidades, valor, 0);
     bump(catFam, [cliente, sucursal, periodo, cat, familia], unidades, valor, existencia);
+    bump(unHistAcc, [cliente, sucursal, un, periodo], unidades, valor, 0);
+    bump(catHistAcc, [cliente, sucursal, cat, periodo], unidades, valor, 0);
 
     // Nav
     navDelta[region] = navDelta[region] || {};
@@ -159,12 +163,12 @@ async function parseUploadedFile(file) {
     };
   }
 
-  // Construir sucursal_periodo final: por cliente/sucursal, lista de periodos con un/cat top3/fam top3
+  // Construir sucursal_periodo final: por cliente/sucursal, {periods, unHist, catHist}
   const sucursalPeriodoOut = {};
   for (const cliente in sucursalTotales) {
     sucursalPeriodoOut[cliente] = {};
     for (const sucursal in sucursalTotales[cliente]) {
-      sucursalPeriodoOut[cliente][sucursal] = [];
+      const periodsArr = [];
       for (const periodo of Object.keys(sucursalTotales[cliente][sucursal])) {
         const p = Number(periodo);
         const tot = sucursalTotales[cliente][sucursal][periodo];
@@ -213,11 +217,24 @@ async function parseUploadedFile(file) {
           dc[cat] = { un: unList, gen: genObj, fam: famList };
         }
 
-        sucursalPeriodoOut[cliente][sucursal].push({
+        periodsArr.push({
           p, u: tot.u, v: Math.round(tot.v * 100) / 100, e: Math.round(tot.e * 100) / 100,
           un: unObj, cat: catTop, fam: famTop, du, dc
         });
       }
+
+      const unHist = {};
+      for (const un in (unHistAcc[cliente]?.[sucursal] || {})) {
+        unHist[un] = Object.entries(unHistAcc[cliente][sucursal][un])
+          .map(([p, v]) => ({ p: Number(p), u: v.u, v: Math.round(v.v * 100) / 100 }));
+      }
+      const catHist = {};
+      for (const cat in (catHistAcc[cliente]?.[sucursal] || {})) {
+        catHist[cat] = Object.entries(catHistAcc[cliente][sucursal][cat])
+          .map(([p, v]) => ({ p: Number(p), u: v.u, v: Math.round(v.v * 100) / 100 }));
+      }
+
+      sucursalPeriodoOut[cliente][sucursal] = { periods: periodsArr, unHist, catHist };
     }
   }
 
@@ -251,11 +268,21 @@ function splitByPeriodo(parsed) {
     const sucursal_periodo = {};
     for (const cliente in parsed.sucursal_periodo) {
       for (const sucursal in parsed.sucursal_periodo[cliente]) {
-        const rows = parsed.sucursal_periodo[cliente][sucursal].filter(r => r.p === periodo);
-        if (rows.length) {
-          sucursal_periodo[cliente] = sucursal_periodo[cliente] || {};
-          sucursal_periodo[cliente][sucursal] = rows;
+        const store = parsed.sucursal_periodo[cliente][sucursal];
+        const periods = store.periods.filter(r => r.p === periodo);
+        if (!periods.length) continue;
+        const unHist = {};
+        for (const un in store.unHist) {
+          const rows = store.unHist[un].filter(r => r.p === periodo);
+          if (rows.length) unHist[un] = rows;
         }
+        const catHist = {};
+        for (const cat in store.catHist) {
+          const rows = store.catHist[cat].filter(r => r.p === periodo);
+          if (rows.length) catHist[cat] = rows;
+        }
+        sucursal_periodo[cliente] = sucursal_periodo[cliente] || {};
+        sucursal_periodo[cliente][sucursal] = { periods, unHist, catHist };
       }
     }
     payloads.push({ periodo, cliente_periodo, sucursal_periodo, nav: parsed.nav });

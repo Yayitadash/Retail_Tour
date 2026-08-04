@@ -272,7 +272,12 @@ function renderCuentaStep() {
   const canPrev = cd.hist.some(r => r.p < periodo);
   const canNext = cd.hist.some(r => r.p > periodo);
 
-  const sucursales = (state.nav[state.region][state.pais][state.cliente] || []).slice().sort();
+  const sucursalesRaw = (state.nav[state.region][state.pais][state.cliente] || []);
+  const sucursalesConVenta = sucursalesRaw.map(s => {
+    const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s] && state.sucursalPeriodo[state.cliente][s].periods) || [];
+    const sucRow = sucSeries.find(r => r.p === periodo);
+    return { s, v: sucRow ? sucRow.v : -1, sucRow };
+  }).sort((a, b) => b.v - a.v);
 
   return `
     <div class="step-head">
@@ -286,13 +291,12 @@ function renderCuentaStep() {
     ${yayaBubble(L('beforeStore'))}
     ${renderClassificationCard(metrics, streak, form)}
     ${renderStatsCard(metrics, L('accountOverview'))}
+    ${renderAvgSalesBubble(metrics)}
     ${renderAccountRecoCard(metrics)}
     ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
-      ${sucursales.map(s => {
-        const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s]) || [];
-        const sucRow = sucSeries.find(r => r.p === periodo);
+      ${sucursalesConVenta.map(({ s, sucRow }) => {
         return `
         <button class="pick-row" data-pick="sucursal" data-value="${escapeAttr(s)}">
           <span class="pick-row-title">${titleCase(s)}</span>
@@ -348,32 +352,36 @@ function renderStatsCard(metrics, title) {
         <div class="stat">
           <div class="stat-value">${fmtMoney(metrics.valor)}</div>
           <div class="stat-label">${L('salesAmount')}</div>
+          <div class="stat-sub ${gClass(metrics.growthValor)}">${fmtPct(metrics.growthValor)}</div>
         </div>
         <div class="stat">
-          <div class="stat-value ${gClass(metrics.growthUnits)}">${fmtPct(metrics.growthUnits)}</div>
-          <div class="stat-label">${L('growthUnits')}</div>
+          <div class="stat-value">${fmtUnits(metrics.unidades)}</div>
+          <div class="stat-label">${L('unitsSold')}</div>
+          <div class="stat-sub ${gClass(metrics.growthUnits)}">${fmtPct(metrics.growthUnits)}</div>
         </div>
         <div class="stat">
-          <div class="stat-value ${gClass(metrics.growthValor)}">${fmtPct(metrics.growthValor)}</div>
-          <div class="stat-label">${L('growthValor')}</div>
+          <div class="stat-value">${fmtUnits(metrics.existencia)}</div>
+          <div class="stat-label">${L('inventoryUnits')}</div>
         </div>
         <div class="stat">
           <div class="stat-value">${fmtWoh(metrics.woh)}</div>
           <div class="stat-label">${L('woh')}</div>
         </div>
-        <div class="stat">
-          <div class="stat-value">${fmtUnits(metrics.avgUnits)}</div>
-          <div class="stat-label">${L('avgMonthly', metrics.nMonths)}</div>
-        </div>
       </div>
     </div>`;
+}
+
+function renderAvgSalesBubble(metrics) {
+  if (metrics.avgUnits === null || metrics.avgUnits === undefined) return '';
+  return yayaBubble(L('avgSalesLine', fmtUnits(metrics.avgUnits), metrics.nMonths));
 }
 
 const UN_ORDER = ['FW', 'APP', 'EQ', 'LIC'];
 
 // ---------- Step: Sucursal (briefing, todo a nivel tienda) ----------
 function renderSucursalBriefing() {
-  const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][state.sucursal]) || [];
+  const sucStore = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][state.sucursal]) || null;
+  const sucSeries = sucStore ? sucStore.periods : [];
   if (!sucSeries.length) return `<div class="empty">${L('noData')}</div>`;
   if (!state.periodo || !sucSeries.some(r => r.p === state.periodo)) state.periodo = sucSeries[sucSeries.length - 1].p;
   const periodo = state.periodo;
@@ -386,6 +394,8 @@ function renderSucursalBriefing() {
   const canNext = sucSeries.some(r => r.p > periodo);
 
   const topCat = sucRow && sucRow.cat && sucRow.cat.length ? sucRow.cat[0].cat : null;
+  const topCatUn = topCat && sucRow.dc && sucRow.dc[topCat] && sucRow.dc[topCat].un && sucRow.dc[topCat].un.length
+    ? sucRow.dc[topCat].un[0].un : null;
 
   return `
     <div class="period-nav">
@@ -395,8 +405,9 @@ function renderSucursalBriefing() {
     </div>
     ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
-    ${sucRow ? renderStoreCard(sucRow) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
-    ${topCat ? yayaBubble(L('topDriver', catLabel(topCat))) : ''}
+    ${sucRow ? renderStoreCard(sucRow, sucStore, periodo) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
+    ${topCat ? yayaBubble(topCatUn ? L('topDriverUn', t(state.lang, 'unLabels')[topCatUn] || topCatUn, catLabel(topCat)) : L('topDriver', catLabel(topCat))) : ''}
+    ${topCat ? yayaBubble(L('checkCompetition')) : ''}
     ${renderRecommendationCard(sucRow)}
     ${renderClosingCard()}
   `;
@@ -411,7 +422,7 @@ function renderClosingCard() {
     </div>`;
 }
 
-function renderStoreCard(sucRow) {
+function renderStoreCard(sucRow, sucStore, periodo) {
   const unEntries = Object.entries(sucRow.un || {})
     .sort((a, b) => UN_ORDER.indexOf(a[0]) - UN_ORDER.indexOf(b[0]));
   const totalUnUnits = unEntries.reduce((s, [, v]) => s + v.u, 0) || 1;
@@ -422,12 +433,8 @@ function renderStoreCard(sucRow) {
 
   return `
     <div class="card store-card">
-      <div class="stats-title">${L('whatSells')}</div>
-      <div class="store-totals">
-        <span>${fmtUnits(sucRow.u)} ${L('units')}</span>
-        <span>${fmtMoney(sucRow.v)}</span>
-        <span>${fmtUnits(sucRow.e)} ${L('inInventory')}</span>
-      </div>
+      <div class="stats-title">${L('relevantData')}</div>
+      ${renderDynamicAvg(sucStore, periodo)}
       <div class="un-bars">
         ${unEntries.map(([un, v]) => `
           <button class="un-bar-row ${state.selectedUn === un ? 'active' : ''}" data-select-un="${un}">
@@ -457,6 +464,26 @@ function renderStoreCard(sucRow) {
           ${renderFamList(sucRow.fam)}
         </div>` : ''}
     </div>`;
+}
+
+function renderDynamicAvg(sucStore, periodo) {
+  let series, scopeLabel;
+  if (state.selectedUn && sucStore.unHist && sucStore.unHist[state.selectedUn]) {
+    series = sucStore.unHist[state.selectedUn];
+    scopeLabel = t(state.lang, 'unLabels')[state.selectedUn] || state.selectedUn;
+  } else if (state.selectedCat && sucStore.catHist && sucStore.catHist[state.selectedCat]) {
+    series = sucStore.catHist[state.selectedCat];
+    scopeLabel = catLabel(state.selectedCat);
+  } else {
+    series = sucStore.periods;
+    scopeLabel = null;
+  }
+  const { avg, nMonths } = avgOverTrailingWindow(series, periodo, 12);
+  if (avg === null) return '';
+  const line = scopeLabel
+    ? L('avgSalesScoped', fmtUnits(avg), scopeLabel, nMonths)
+    : L('avgSalesLine', fmtUnits(avg), nMonths);
+  return `<div class="dynamic-avg">${line}</div>`;
 }
 
 function renderFamList(famArr) {
@@ -545,19 +572,13 @@ function renderDetailPanel(sucRow) {
 function renderAccountRecoCard(metrics) {
   const templates = t(state.lang, 'recoTemplates');
   if (!metrics || !metrics.clasif || !templates[metrics.clasif]) return '';
-  return yayaBubble(`
-    <span class="yaya-bubble-heading">${L('forConversation')}</span>
-    ${templates[metrics.clasif]}
-  `);
+  return yayaBubble(`${templates[metrics.clasif]}`);
 }
 
 function renderRecommendationCard(sucRow) {
   const lines = buildRecommendations(sucRow);
   if (!lines.length) return '';
-  return yayaBubble(`
-    <span class="yaya-bubble-heading">${L('forThisStore')}</span>
-    <ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
-  `);
+  return yayaBubble(`<ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`);
 }
 
 function dominantGen(genObj) {
@@ -719,7 +740,7 @@ function attachHandlers() {
 
 function shiftPeriod(dir) {
   const series = state.step === 'sucursal'
-    ? (state.sucursalPeriodo[state.cliente][state.sucursal])
+    ? (state.sucursalPeriodo[state.cliente][state.sucursal].periods)
     : (state.clientePeriodo[state.cliente].hist);
   const periods = series.map(r => r.p).sort((a, b) => a - b);
   const idx = periods.indexOf(state.periodo);

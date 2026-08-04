@@ -81,17 +81,33 @@ function mergeClientePeriodo(base, delta) {
   }
 }
 
+function mergeSeriesByPeriod(baseArr, deltaArr) {
+  for (const row of deltaArr) {
+    const idx = baseArr.findIndex(r => r.p === row.p);
+    if (idx >= 0) baseArr[idx] = row;
+    else baseArr.push(row);
+  }
+  baseArr.sort((a, b) => a.p - b.p);
+}
+
 function mergeSucursalPeriodo(base, delta) {
   for (const cliente in delta) {
     if (!base[cliente]) base[cliente] = {};
     for (const sucursal in delta[cliente]) {
-      if (!base[cliente][sucursal]) base[cliente][sucursal] = [];
-      for (const row of delta[cliente][sucursal]) {
-        const existingIdx = base[cliente][sucursal].findIndex(r => r.p === row.p);
-        if (existingIdx >= 0) base[cliente][sucursal][existingIdx] = row;
-        else base[cliente][sucursal].push(row);
+      const incoming = delta[cliente][sucursal];
+      if (!base[cliente][sucursal]) base[cliente][sucursal] = { periods: [], unHist: {}, catHist: {} };
+      const store = base[cliente][sucursal];
+
+      mergeSeriesByPeriod(store.periods, incoming.periods || []);
+
+      for (const un in (incoming.unHist || {})) {
+        store.unHist[un] = store.unHist[un] || [];
+        mergeSeriesByPeriod(store.unHist[un], incoming.unHist[un]);
       }
-      base[cliente][sucursal].sort((a, b) => a.p - b.p);
+      for (const cat in (incoming.catHist || {})) {
+        store.catHist[cat] = store.catHist[cat] || [];
+        mergeSeriesByPeriod(store.catHist[cat], incoming.catHist[cat]);
+      }
     }
   }
 }

@@ -6,8 +6,11 @@
 // ============================================================
 
 const MARCA_UN = { 456: 'FW', 789: 'APP', 790: 'EQ' };
+const UN_CODES = new Set(['FW', 'APP', 'EQ', 'LIC']);
 function unFromMarca(marca) {
-  return MARCA_UN[Number(marca)] || 'LIC';
+  const asText = String(marca).trim().toUpperCase();
+  if (UN_CODES.has(asText)) return asText; // el archivo ya trae FW/APP/EQ/LIC directo
+  return MARCA_UN[Number(marca)] || 'LIC';  // formato viejo: código numérico de marca
 }
 
 const MESES_ES = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -117,7 +120,22 @@ function detectStreak(fullHistory, periodo) {
   return { clasif: current, meses: streak, changedFrom };
 }
 
-/** Última clasificación disponible en el historial (para "forma reciente") */
+/**
+ * Promedio mensual de unidades en una ventana de hasta N meses hacia atrás
+ * desde `periodo` (inclusive), usando solo los meses con datos reales.
+ * A diferencia de computeMetricsForPeriod, no requiere que exista una fila
+ * exactamente en `periodo` (útil para promedios filtrados por UN/CAT que
+ * pueden no tener venta justo ese mes).
+ */
+function avgOverTrailingWindow(series, periodo, months = 12) {
+  const windowPeriods = new Set();
+  for (let k = 0; k < months; k++) windowPeriods.add(periodoAddMonths(periodo, -k));
+  const avail = series.filter(r => windowPeriods.has(r.p));
+  const nMonths = avail.length;
+  if (nMonths === 0) return { avg: null, nMonths: 0 };
+  const avg = avail.reduce((s, r) => s + r.u, 0) / nMonths;
+  return { avg, nMonths };
+}
 function recentForm(fullHistory, periodo, n = 6) {
   const upTo = fullHistory.filter(h => h.periodo <= periodo).slice(-n);
   return upTo;
