@@ -406,8 +406,7 @@ function renderSucursalBriefing() {
     ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
     ${sucRow ? renderStoreCard(sucRow, sucStore, periodo) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
-    ${topCat ? yayaBubble(topCatUn ? L('topDriverUn', t(state.lang, 'unLabels')[topCatUn] || topCatUn, catLabel(topCat)) : L('topDriver', catLabel(topCat))) : ''}
-    ${topCat ? yayaBubble(L('checkCompetition')) : ''}
+    ${topCat ? yayaBubble(topCatUn ? L('topDriverUn', t(state.lang, 'unLabels')[topCatUn] || topCatUn, catLabel(topCat)) : L('topDriverPlain', catLabel(topCat))) : ''}
     ${renderRecommendationCard(sucRow)}
     ${renderClosingCard()}
   `;

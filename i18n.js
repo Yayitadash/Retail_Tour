@@ -95,8 +95,8 @@ const I18N = {
     trendPositive: (n) => `La cuenta mantiene una tendencia positiva durante los últimos ${n} meses.`,
     trendNegative: (n) => `La cuenta viene desacelerando durante los últimos ${n} meses.`,
     topDriver: (cat) => `${cat} continúa siendo el principal impulsor de esta sucursal.`,
-    topDriverUn: (un, cat) => `${un} de ${cat} continúa siendo el principal impulsor de esta sucursal.`,
-    checkCompetition: 'Vale la pena revisar qué está haciendo la competencia en esta categoría, en los alrededores de esta sucursal, antes de tu visita.'
+    topDriverUn: (un, cat) => `${un} de ${cat} continúa siendo el principal impulsor de esta sucursal. Vale la pena revisar qué hace la competencia más cercana a esta sucursal.`,
+    topDriverPlain: (cat) => `${cat} continúa siendo el principal impulsor de esta sucursal. Vale la pena revisar qué hace la competencia más cercana a esta sucursal.`
   },
   en: {
     boot: 'Getting the tour ready…',
@@ -190,8 +190,8 @@ const I18N = {
     trendPositive: (n) => `The account has kept a positive trend for the last ${n} months.`,
     trendNegative: (n) => `The account has been slowing down for the last ${n} months.`,
     topDriver: (cat) => `${cat} continues to be the main driver in this store.`,
-    topDriverUn: (un, cat) => `${un} in ${cat} continues to be the main driver in this store.`,
-    checkCompetition: 'Worth checking what the competition is doing in this category, near this store, before your visit.'
+    topDriverUn: (un, cat) => `${un} in ${cat} continues to be the main driver in this store. Worth checking what the nearest competition is doing.`,
+    topDriverPlain: (cat) => `${cat} continues to be the main driver in this store. Worth checking what the nearest competition is doing.`
   }
 };
 
