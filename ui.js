@@ -313,10 +313,12 @@ function renderClienteStep() {
 
   return `
     <div class="step-head">
-      ${yayaBubble(L('confirmPais', titleCase(state.pais)))}
-      <h1>${L('askCliente')}</h1>
+      ${yayaBubble(L('confirmPaisClasifIntro', titleCase(state.pais)))}
     </div>
     <div class="clasif-long-list">${filterButtons}</div>
+    <div class="step-head" style="margin-top:20px;">
+      <h1>${L('askCliente')}</h1>
+    </div>
     ${state.clasifFilter ? `
       <div class="filter-status-row">
         <span class="filter-status-count">${visibles.length} ${visibles.length === 1 ? L('accountSingular') : L('accounts')}</span>
