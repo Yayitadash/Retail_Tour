@@ -37,13 +37,16 @@ async function fetchJSON(path) {
  * los documentos de Firestore (monthly_uploads), y devuelve todo
  * fusionado en memoria.
  */
-const SUCURSAL_REGIONS = ['CEN', 'CAR', 'COL', 'VEN'];
+// CEN se divide en 3 partes (Guatemala, Costa Rica, resto) para que ningún
+// archivo se acerque al límite de subida de GitHub. Las demás regiones,
+// más chicas, se quedan en un solo archivo cada una.
+const SUCURSAL_SHARDS = ['CEN_GT', 'CEN_CR', 'CEN_OTROS', 'CAR', 'COL', 'VEN'];
 
 async function loadAllData() {
   const [nav, clientePeriodo, ...sucursalParts] = await Promise.all([
     fetchJSON('./data/nav.json'),
     fetchJSON('./data/cliente_periodo.json'),
-    ...SUCURSAL_REGIONS.map(r => fetchJSON(`./data/sucursal_periodo_${r}.json`))
+    ...SUCURSAL_SHARDS.map(r => fetchJSON(`./data/sucursal_periodo_${r}.json`))
   ]);
   const sucursalPeriodo = Object.assign({}, ...sucursalParts);
 
