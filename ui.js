@@ -10,6 +10,7 @@ const state = {
   selectedUn: null, selectedCat: null,
   clasifFilter: null,
   clasifLegendOpen: false,
+  navStack: [], navPos: -1,
   lang: loadLang(),
   user: loadUser(),
   loading: true
@@ -96,6 +97,7 @@ function renderGreetingCard() {
     </div>`;
   document.getElementById('continueBtn').addEventListener('click', () => {
     state.step = 'region';
+    pushHistory();
     render();
   });
 }
@@ -128,6 +130,30 @@ function renderWelcome() {
   });
 }
 
+// ---------- Historial de navegación (atrás / adelante propios de la app) ----------
+function snapshotNav() {
+  return { step: state.step, region: state.region, pais: state.pais, cliente: state.cliente, sucursal: state.sucursal };
+}
+function pushHistory() {
+  state.navStack = state.navStack.slice(0, state.navPos + 1);
+  state.navStack.push(snapshotNav());
+  state.navPos = state.navStack.length - 1;
+}
+function goStepBack() {
+  if (state.navPos <= 0) return;
+  state.navPos--;
+  Object.assign(state, state.navStack[state.navPos]);
+  state.periodo = null; state.selectedUn = null; state.selectedCat = null;
+  render();
+}
+function goStepForward() {
+  if (state.navPos >= state.navStack.length - 1) return;
+  state.navPos++;
+  Object.assign(state, state.navStack[state.navPos]);
+  state.periodo = null; state.selectedUn = null; state.selectedCat = null;
+  render();
+}
+
 // ---------- Router ----------
 function render() {
   const crumbs = renderBreadcrumb();
@@ -139,24 +165,38 @@ function render() {
   else if (state.step === 'sucursal') body = renderSucursalBriefing();
 
   $app.innerHTML = `
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">RT</span>
-        <span class="brand-name">Retail Tour</span>
-      </div>
-      <div class="topbar-actions">
-        <button class="settings-btn" id="settingsBtn" title="${L('changeName')}">⚙</button>
-        <button class="lang-toggle" id="langToggle">${state.lang.toUpperCase()}</button>
-        <button class="upload-btn" id="btnUpload" title="${L('update')}">⇪</button>
-      </div>
-    </header>
-    ${crumbs}
+    <div class="sticky-header">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">RT</span>
+          <span class="brand-name">Retail Tour</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="settings-btn" id="settingsBtn" title="${L('changeName')}">⚙</button>
+          <button class="lang-toggle" id="langToggle">${state.lang.toUpperCase()}</button>
+          <button class="upload-btn" id="btnUpload" title="${L('update')}">⇪</button>
+        </div>
+      </header>
+      ${crumbs}
+    </div>
     <main class="view">${body}</main>
     <div id="uploadModal" class="modal-backdrop hidden">
       ${renderUploadModal()}
     </div>
+    ${renderStepNavBar()}
   `;
   attachHandlers();
+}
+
+function renderStepNavBar() {
+  if (state.navStack.length <= 1) return '';
+  const canBack = state.navPos > 0;
+  const canForward = state.navPos < state.navStack.length - 1;
+  return `
+    <div class="step-nav-bar">
+      <button class="step-nav-btn" id="navBackBtn" ${canBack ? '' : 'disabled'}>‹ ${L('backWord')}</button>
+      <button class="step-nav-btn" id="navForwardBtn" ${canForward ? '' : 'disabled'}>${L('forwardWord')} ›</button>
+    </div>`;
 }
 
 function renderBreadcrumb() {
@@ -656,6 +696,7 @@ function attachHandlers() {
       else if (kind === 'pais') { state.pais = value; state.clasifFilter = null; state.clasifLegendOpen = false; state.step = 'cliente'; }
       else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'cuenta'; }
       else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'sucursal'; }
+      pushHistory();
       render();
     });
   });
@@ -668,6 +709,7 @@ function attachHandlers() {
       if (target === 'region') { state.pais = state.cliente = state.sucursal = null; }
       if (target === 'pais') { state.cliente = state.sucursal = null; }
       if (target === 'cuenta') { state.sucursal = null; }
+      pushHistory();
       render();
     });
   });
@@ -682,8 +724,14 @@ function attachHandlers() {
     state.periodo = null;
     state.selectedUn = null; state.selectedCat = null;
     state.step = 'cuenta';
+    pushHistory();
     render();
   });
+
+  const navBackBtn = document.getElementById('navBackBtn');
+  const navForwardBtn = document.getElementById('navForwardBtn');
+  if (navBackBtn) navBackBtn.addEventListener('click', goStepBack);
+  if (navForwardBtn) navForwardBtn.addEventListener('click', goStepForward);
 
   document.querySelectorAll('[data-filter-clasif]').forEach(el => {
     el.addEventListener('click', () => {
