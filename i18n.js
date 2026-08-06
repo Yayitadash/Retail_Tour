@@ -4,7 +4,7 @@
 
 const I18N = {
   es: {
-    boot: 'Preparando el recorrido…',
+    boot: 'Preparándome para acompañarte en tu recorrido…',
     welcomeTitle: '¿Cómo te llamas?',
     welcomeSub: 'Yaya quiere saber con quién va a hacer el recorrido.',
     namePlaceholder: 'Tu nombre',
@@ -108,7 +108,7 @@ const I18N = {
     topDriverPlain: (cat) => `${cat} continúa siendo el principal impulsor de esta sucursal. Vale la pena revisar qué hace la competencia más cercana a esta sucursal.`
   },
   en: {
-    boot: 'Getting the tour ready…',
+    boot: 'Getting ready to join you on your tour…',
     welcomeTitle: "What's your name?",
     welcomeSub: 'Yaya wants to know who she’s touring with today.',
     namePlaceholder: 'Your name',
