@@ -62,13 +62,47 @@ function yayaBubble(text, extraClass) {
 }
 
 // ---------- Boot ----------
+const APP_ACCESS_CODE = '1234';
+
 async function boot() {
+  // A quien ya tenía la app instalada (ya tiene nombre guardado) no se le
+  // pide la clave — solo aplica para instalaciones nuevas de aquí en adelante.
+  if (!hasAccess() && state.user) saveAccess();
+
+  if (!hasAccess()) {
+    renderAccessGate();
+    return;
+  }
   if (!state.user) {
     state.step = 'welcome';
     renderWelcome();
     return;
   }
   await loadData();
+}
+
+function renderAccessGate(error) {
+  $app.innerHTML = `
+    <div class="welcome-screen">
+      <div class="welcome-avatar-big">${getYayaAvatar()}</div>
+      <h1 class="welcome-title">${L('accessTitle')}</h1>
+      <p class="welcome-sub">${L('accessSub')}</p>
+      <input type="password" inputmode="numeric" id="accessInput" class="welcome-input" placeholder="${L('accessPlaceholder')}" maxlength="12" />
+      ${error ? `<p class="access-error">${L('accessError')}</p>` : ''}
+      <button class="start-btn" id="accessBtn">${L('accessButton')}</button>
+    </div>`;
+
+  const submit = () => {
+    const val = document.getElementById('accessInput').value.trim();
+    if (val === APP_ACCESS_CODE) {
+      saveAccess();
+      boot();
+    } else {
+      renderAccessGate(true);
+    }
+  };
+  document.getElementById('accessBtn').addEventListener('click', submit);
+  document.getElementById('accessInput').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
 async function loadData() {
@@ -601,7 +635,7 @@ function renderExploreSection(cubeRows, sucStore, periodo) {
   const genLabels = t(state.lang, 'genLabels');
 
   const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r[0] === u));
-  const catOptions = cubeBreakdown(cubeRows, 'cat').map(x => x.key).sort();
+  const catOptions = cubeBreakdown(cubeRows, 'cat').slice(0, 4).map(x => x.key);
   const genOrder = ['MEN', 'WOMEN', 'KIDS'];
   const genOptions = genOrder.filter(g => cubeRows.some(r => r[2] === g));
 
@@ -613,22 +647,44 @@ function renderExploreSection(cubeRows, sucStore, periodo) {
     const filtered = cubeFilterRows(cubeRows, filters);
     const totals = cubeTotals(filtered);
     const topFams = cubeTopFamilias(filtered, 3);
-    const { avg, nMonths } = cubeAvgTrailing(sucStore, filters, periodo, 12);
+    const { avg } = cubeAvgTrailing(sucStore, filters, periodo, 12);
     const scopeParts = [];
     if (filters.un) scopeParts.push(unLabels[filters.un] || filters.un);
     if (filters.cat) scopeParts.push(catLabel(filters.cat));
     if (filters.gen) scopeParts.push(genLabels[filters.gen] || filters.gen);
     const scopeLabel = scopeParts.join(' de ');
 
+    // Crecimiento vs mismo mes del año anterior, para esta misma combinación de filtros
+    const pyPeriodo = periodo - 100;
+    const pyRows = (sucStore.cube && sucStore.cube[String(pyPeriodo)]) || [];
+    const pyTotals = cubeTotals(cubeFilterRows(pyRows, filters));
+    const growthUnits = pyTotals.u ? (totals.u - pyTotals.u) / Math.abs(pyTotals.u) : null;
+    const growthValor = pyTotals.v ? (totals.v - pyTotals.v) / Math.abs(pyTotals.v) : null;
+    const woh = (avg && avg !== 0) ? (totals.e / avg) * 4.33 : null;
+
     resultHtml = `
       <div class="detail-panel">
         <div class="detail-panel-title">${scopeLabel}</div>
-        <div class="explore-totals">
-          <span>${fmtUnits(totals.u)} ${L('units')}</span>
-          <span>${fmtMoney(totals.v)}</span>
-          <span>${fmtUnits(totals.e)} ${L('inInventory')}</span>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-value">${fmtMoney(totals.v)}</div>
+            <div class="stat-label">${L('salesAmount')}</div>
+            <div class="stat-sub ${gClass(growthValor)}">${fmtPct(growthValor)}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtUnits(totals.u)}</div>
+            <div class="stat-label">${L('unitsSold')}</div>
+            <div class="stat-sub ${gClass(growthUnits)}">${fmtPct(growthUnits)}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtUnits(totals.e)}</div>
+            <div class="stat-label">${L('inventoryUnits')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtWoh(woh)}</div>
+            <div class="stat-label">${L('woh')}</div>
+          </div>
         </div>
-        ${avg !== null ? `<div class="dynamic-avg">${L('avgSalesScoped', fmtUnits(avg), scopeLabel, nMonths)}</div>` : ''}
         ${topFams.length ? `
           <div class="detail-section">
             <span class="detail-section-label">${L('leadingFamiliesScoped', scopeLabel)}</span>
