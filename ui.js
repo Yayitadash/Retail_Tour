@@ -154,8 +154,13 @@ function goStepForward() {
   render();
 }
 
+let lastRenderedStep = null;
+
+
 // ---------- Router ----------
 function render() {
+  const stepChanged = state.step !== lastRenderedStep;
+  lastRenderedStep = state.step;
   const crumbs = renderBreadcrumb();
   let body = '';
   if (state.step === 'region') body = renderRegionStep();
@@ -189,6 +194,7 @@ function render() {
     ${renderStepNavBar()}
   `;
   attachHandlers();
+  if (stepChanged) window.scrollTo(0, 0);
 }
 
 function renderClasifGuideModal() {
