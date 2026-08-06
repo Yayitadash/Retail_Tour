@@ -7,7 +7,7 @@ const state = {
   step: 'welcome', // welcome | region | pais | cliente | cuenta | sucursal
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
-  selectedUn: null, selectedCat: null,
+  filterUn: null, filterCat: null, filterGen: null,
   clasifFilter: null,
   clasifLegendOpen: false,
   navStack: [], navPos: -1,
@@ -143,14 +143,14 @@ function goStepBack() {
   if (state.navPos <= 0) return;
   state.navPos--;
   Object.assign(state, state.navStack[state.navPos]);
-  state.periodo = null; state.selectedUn = null; state.selectedCat = null;
+  state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null;
   render();
 }
 function goStepForward() {
   if (state.navPos >= state.navStack.length - 1) return;
   state.navPos++;
   Object.assign(state, state.navStack[state.navPos]);
-  state.periodo = null; state.selectedUn = null; state.selectedCat = null;
+  state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null;
   render();
 }
 
@@ -469,14 +469,16 @@ function renderSucursalBriefing() {
 
   const simpleSeries = sucSeries.map(r => ({ p: r.p, u: r.u, v: r.v, e: r.e }));
   const metrics = computeMetricsForPeriod(simpleSeries, periodo);
-  const sucRow = sucSeries.find(r => r.p === periodo);
+  const periodRow = sucSeries.find(r => r.p === periodo);
+  const cubeRows = (sucStore.cube && sucStore.cube[String(periodo)]) || [];
 
   const canPrev = sucSeries.some(r => r.p < periodo);
   const canNext = sucSeries.some(r => r.p > periodo);
 
-  const topCat = sucRow && sucRow.cat && sucRow.cat.length ? sucRow.cat[0].cat : null;
-  const topCatUn = topCat && sucRow.dc && sucRow.dc[topCat] && sucRow.dc[topCat].un && sucRow.dc[topCat].un.length
-    ? sucRow.dc[topCat].un[0].un : null;
+  const catBreak = cubeBreakdown(cubeRows, 'cat');
+  const topCat = catBreak.length ? catBreak[0].key : null;
+  const topCatUnBreak = topCat ? cubeBreakdown(cubeFilterRows(cubeRows, { cat: topCat }), 'un') : [];
+  const topCatUn = topCatUnBreak.length ? topCatUnBreak[0].key : null;
 
   return `
     <div class="period-nav">
@@ -486,9 +488,10 @@ function renderSucursalBriefing() {
     </div>
     ${yayaBubble(L('beforeIndicators'))}
     ${metrics ? renderStatsCard(metrics, L('storeOverview')) : ''}
-    ${sucRow ? renderStoreCard(sucRow, sucStore, periodo) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
+    ${periodRow ? renderStoreCard(cubeRows, sucStore, periodo) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
     ${topCat ? yayaBubble(topCatUn ? L('topDriverUn', t(state.lang, 'unLabels')[topCatUn] || topCatUn, catLabel(topCat)) : L('topDriverPlain', catLabel(topCat))) : ''}
-    ${renderRecommendationCard(sucRow)}
+    ${periodRow ? renderExploreSection(cubeRows, sucStore, periodo) : ''}
+    ${renderRecommendationCard(cubeRows)}
     ${renderClosingCard()}
   `;
 }
@@ -502,87 +505,73 @@ function renderClosingCard() {
     </div>`;
 }
 
-function renderStoreCard(sucRow, sucStore, periodo) {
-  const unEntries = Object.entries(sucRow.un || {})
-    .sort((a, b) => UN_ORDER.indexOf(a[0]) - UN_ORDER.indexOf(b[0]));
-  const totalUnUnits = unEntries.reduce((s, [, v]) => s + v.u, 0) || 1;
+// ---------- Tarjeta estática: "Datos relevantes de esta sucursal" ----------
+function renderStoreCard(cubeRows, sucStore, periodo) {
   const unLabels = t(state.lang, 'unLabels');
+  const unBreak = cubeBreakdown(cubeRows, 'un').sort((a, b) => UN_ORDER.indexOf(a.key) - UN_ORDER.indexOf(b.key));
+  const totalUnUnits = unBreak.reduce((s, x) => s + x.u, 0) || 1;
 
-  const catEntries = sucRow.cat || [];
-  const totalCatUnits = catEntries.reduce((s, c) => s + c.u, 0) || 1;
+  const catBreak = cubeBreakdown(cubeRows, 'cat').slice(0, 3);
+  const totalCatUnits = cubeBreakdown(cubeRows, 'cat').reduce((s, x) => s + x.u, 0) || 1;
+
+  const genBreak = cubeBreakdown(cubeRows, 'gen');
+  const totalGenUnits = genBreak.reduce((s, x) => s + x.u, 0) || 1;
+  const genLabels = t(state.lang, 'genLabels');
+  const genOrder = ['MEN', 'WOMEN', 'KIDS'];
+
+  const topFams = cubeTopFamilias(cubeRows, 3);
+  const { avg, nMonths } = cubeAvgTrailing(sucStore, {}, periodo, 12);
 
   return `
     <div class="card store-card">
       <div class="stats-title">${L('relevantData')}</div>
-      ${renderDynamicAvg(sucStore, periodo)}
+      ${avg !== null ? `<div class="dynamic-avg">${L('avgSalesLine', fmtUnits(avg), nMonths)}</div>` : ''}
+
       <div class="un-bars">
-        ${unEntries.map(([un, v]) => `
-          <button class="un-bar-row ${state.selectedUn === un ? 'active' : ''}" data-select-un="${un}">
-            ${state.selectedUn === un ? `<span class="bar-check">✓</span>` : ''}
-            <span class="un-bar-label">${unLabels[un] || un}</span>
-            <div class="un-bar-track"><div class="un-bar-fill" style="width:${(v.u / totalUnUnits * 100).toFixed(0)}%"></div></div>
-            <span class="un-bar-pct">${(v.u / totalUnUnits * 100).toFixed(0)}%</span>
-          </button>
+        ${unBreak.map(x => `
+          <div class="un-bar-row un-bar-static">
+            <span class="un-bar-label">${unLabels[x.key] || x.key}</span>
+            <div class="un-bar-track"><div class="un-bar-fill" style="width:${(x.u / totalUnUnits * 100).toFixed(0)}%"></div></div>
+            <span class="un-bar-pct">${(x.u / totalUnUnits * 100).toFixed(0)}%</span>
+          </div>
         `).join('')}
       </div>
-      <span class="tap-hint">${L('tapToExplore')}</span>
-      ${catEntries.length ? `
+
+      ${catBreak.length ? `
         <div class="chip-row">
           <span class="chip-row-label">${L('concentratedIn')}...</span>
           <div class="un-bars">
-            ${catEntries.map(c => `
-              <button class="un-bar-row cat-bar-row ${state.selectedCat === c.cat ? 'active' : ''}" data-select-cat="${escapeAttr(c.cat)}">
-                ${state.selectedCat === c.cat ? `<span class="bar-check">✓</span>` : ''}
-                <span class="un-bar-label">${catLabel(c.cat)}</span>
-                <div class="un-bar-track"><div class="un-bar-fill cat-fill" style="width:${(c.u / totalCatUnits * 100).toFixed(0)}%"></div></div>
-                <span class="un-bar-pct">${(c.u / totalCatUnits * 100).toFixed(0)}%</span>
-              </button>
+            ${catBreak.map(x => `
+              <div class="un-bar-row un-bar-static">
+                <span class="un-bar-label">${catLabel(x.key)}</span>
+                <div class="un-bar-track"><div class="un-bar-fill cat-fill" style="width:${(x.u / totalCatUnits * 100).toFixed(0)}%"></div></div>
+                <span class="un-bar-pct">${(x.u / totalCatUnits * 100).toFixed(0)}%</span>
+              </div>
             `).join('')}
           </div>
         </div>` : ''}
-      ${renderDetailPanel(sucRow)}
-      ${renderFamSection(sucRow)}
-    </div>`;
-}
 
-function renderDynamicAvg(sucStore, periodo) {
-  let series, scopeLabel;
-  if (state.selectedUn && sucStore.unHist && sucStore.unHist[state.selectedUn]) {
-    series = sucStore.unHist[state.selectedUn];
-    scopeLabel = t(state.lang, 'unLabels')[state.selectedUn] || state.selectedUn;
-  } else if (state.selectedCat && sucStore.catHist && sucStore.catHist[state.selectedCat]) {
-    series = sucStore.catHist[state.selectedCat];
-    scopeLabel = catLabel(state.selectedCat);
-  } else {
-    series = sucStore.periods;
-    scopeLabel = null;
-  }
-  const { avg, nMonths } = avgOverTrailingWindow(series, periodo, 12);
-  if (avg === null) return '';
-  const line = scopeLabel
-    ? L('avgSalesScoped', fmtUnits(avg), scopeLabel, nMonths)
-    : L('avgSalesLine', fmtUnits(avg), nMonths);
-  return `<div class="dynamic-avg">${line}</div>`;
-}
+      ${genBreak.length ? `
+        <div class="chip-row">
+          <span class="chip-row-label">${L('genderIn')}</span>
+          <div class="un-bars">
+            ${genOrder.filter(g => genBreak.some(x => x.key === g)).map(g => {
+              const x = genBreak.find(y => y.key === g);
+              return `
+              <div class="un-bar-row un-bar-static">
+                <span class="un-bar-label">${genLabels[g] || g}</span>
+                <div class="un-bar-track"><div class="un-bar-fill gen-fill" style="width:${(x.u / totalGenUnits * 100).toFixed(0)}%"></div></div>
+                <span class="un-bar-pct">${(x.u / totalGenUnits * 100).toFixed(0)}%</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
 
-function renderFamSection(sucRow) {
-  const unLabels = t(state.lang, 'unLabels');
-  let famArr, scopeLabel;
-  if (state.selectedUn && sucRow.du && sucRow.du[state.selectedUn]) {
-    famArr = sucRow.du[state.selectedUn].fam;
-    scopeLabel = unLabels[state.selectedUn] || state.selectedUn;
-  } else if (state.selectedCat && sucRow.dc && sucRow.dc[state.selectedCat]) {
-    famArr = sucRow.dc[state.selectedCat].fam;
-    scopeLabel = catLabel(state.selectedCat);
-  } else {
-    famArr = sucRow.fam;
-    scopeLabel = null;
-  }
-  if (!famArr || !famArr.length) return '';
-  return `
-    <div class="chip-row">
-      <span class="chip-row-label">${scopeLabel ? L('leadingFamiliesScoped', scopeLabel) : L('leadingFamilies')}</span>
-      ${renderFamList(famArr)}
+      ${topFams.length ? `
+        <div class="chip-row">
+          <span class="chip-row-label">${L('leadingFamilies')}</span>
+          ${renderFamList(topFams)}
+        </div>` : ''}
     </div>`;
 }
 
@@ -600,63 +589,73 @@ function renderFamList(famArr) {
     </div>`;
 }
 
-function renderGenBreakdown(genObj) {
+// ---------- Sección interactiva: "¿Qué te gustaría explorar en esta sucursal?" ----------
+function renderExploreSection(cubeRows, sucStore, periodo) {
+  const unLabels = t(state.lang, 'unLabels');
   const genLabels = t(state.lang, 'genLabels');
-  const order = ['MEN', 'WOMEN', 'KIDS'];
-  const entries = order.filter(g => genObj[g]).map(g => [g, genObj[g]]);
-  const total = entries.reduce((s, [, v]) => s + v.u, 0) || 1;
-  return `
-    <div class="gen-bars">
-      ${entries.map(([g, v]) => `
-        <div class="gen-bar-row">
-          <span class="gen-bar-label">${genLabels[g] || g}</span>
-          <div class="un-bar-track"><div class="un-bar-fill gen-fill" style="width:${(v.u / total * 100).toFixed(0)}%"></div></div>
-          <span class="un-bar-pct">${(v.u / total * 100).toFixed(0)}%</span>
-        </div>
-      `).join('')}
-    </div>`;
-}
 
-function renderDetailPanel(sucRow) {
-  if (state.selectedUn && sucRow.du && sucRow.du[state.selectedUn]) {
-    const d = sucRow.du[state.selectedUn];
-    const unLabels = t(state.lang, 'unLabels');
-    const totalCat = (d.cat || []).reduce((s, c) => s + c.u, 0) || 1;
-    return `
+  const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r[0] === u));
+  const catOptions = cubeBreakdown(cubeRows, 'cat').map(x => x.key).sort();
+  const genOrder = ['MEN', 'WOMEN', 'KIDS'];
+  const genOptions = genOrder.filter(g => cubeRows.some(r => r[2] === g));
+
+  const filters = { un: state.filterUn, cat: state.filterCat, gen: state.filterGen };
+  const anyFilter = filters.un || filters.cat || filters.gen;
+
+  let resultHtml = '';
+  if (anyFilter) {
+    const filtered = cubeFilterRows(cubeRows, filters);
+    const totals = cubeTotals(filtered);
+    const topFams = cubeTopFamilias(filtered, 3);
+    const { avg, nMonths } = cubeAvgTrailing(sucStore, filters, periodo, 12);
+    const scopeParts = [];
+    if (filters.un) scopeParts.push(unLabels[filters.un] || filters.un);
+    if (filters.cat) scopeParts.push(catLabel(filters.cat));
+    if (filters.gen) scopeParts.push(genLabels[filters.gen] || filters.gen);
+    const scopeLabel = scopeParts.join(' de ');
+
+    resultHtml = `
       <div class="detail-panel">
-        <div class="detail-panel-title">${unLabels[state.selectedUn] || state.selectedUn}</div>
-        ${d.cat && d.cat.length ? `
+        <div class="detail-panel-title">${scopeLabel}</div>
+        <div class="explore-totals">
+          <span>${fmtUnits(totals.u)} ${L('units')}</span>
+          <span>${fmtMoney(totals.v)}</span>
+          <span>${fmtUnits(totals.e)} ${L('inInventory')}</span>
+        </div>
+        ${avg !== null ? `<div class="dynamic-avg">${L('avgSalesScoped', fmtUnits(avg), scopeLabel, nMonths)}</div>` : ''}
+        ${topFams.length ? `
           <div class="detail-section">
-            <span class="detail-section-label">${L('categoriesIn')}</span>
-            <ul class="cat-list">${d.cat.map(c => `<li>${catLabel(c.cat)} <span class="cat-pct">(${(c.u / totalCat * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
-          </div>` : ''}
-        ${d.gen && Object.keys(d.gen).length ? `
-          <div class="detail-section">
-            <span class="detail-section-label">${L('genderIn')}</span>
-            ${renderGenBreakdown(d.gen)}
-          </div>` : ''}
+            <span class="detail-section-label">${L('leadingFamiliesScoped', scopeLabel)}</span>
+            ${renderFamList(topFams)}
+          </div>` : `<p class="explore-empty">${L('exploreNoData')}</p>`}
       </div>`;
+  } else {
+    resultHtml = `<p class="explore-hint">${L('exploreHint')}</p>`;
   }
-  if (state.selectedCat && sucRow.dc && sucRow.dc[state.selectedCat]) {
-    const d = sucRow.dc[state.selectedCat];
-    const unLabels = t(state.lang, 'unLabels');
-    const totalUn = (d.un || []).reduce((s, u) => s + u.u, 0) || 1;
-    return `
-      <div class="detail-panel">
-        <div class="detail-panel-title">${catLabel(state.selectedCat)}</div>
-        ${d.un && d.un.length ? `
-          <div class="detail-section">
-            <span class="detail-section-label">${L('businessUnitsIn')}</span>
-            <ul class="cat-list">${d.un.map(u => `<li>${unLabels[u.un] || u.un} <span class="cat-pct">(${(u.u / totalUn * 100).toFixed(0)}%)</span></li>`).join('')}</ul>
-          </div>` : ''}
-        ${d.gen && Object.keys(d.gen).length ? `
-          <div class="detail-section">
-            <span class="detail-section-label">${L('genderIn')}</span>
-            ${renderGenBreakdown(d.gen)}
-          </div>` : ''}
-      </div>`;
-  }
-  return '';
+
+  return `
+    ${yayaBubble(L('exploreTitle'))}
+    <div class="card explore-card">
+      <div class="explore-group">
+        <span class="detail-section-label">${L('businessUnitsIn')}</span>
+        <div class="chips">
+          ${unOptions.map(u => `<button class="chip chip-filter ${state.filterUn === u ? 'active' : ''}" data-filter-un="${u}">${unLabels[u] || u}</button>`).join('')}
+        </div>
+      </div>
+      <div class="explore-group">
+        <span class="detail-section-label">${L('categoriesIn')}</span>
+        <div class="chips">
+          ${catOptions.map(c => `<button class="chip chip-filter ${state.filterCat === c ? 'active' : ''}" data-filter-cat="${escapeAttr(c)}">${catLabel(c)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="explore-group">
+        <span class="detail-section-label">${L('genderIn')}</span>
+        <div class="chips">
+          ${genOptions.map(g => `<button class="chip chip-filter ${state.filterGen === g ? 'active' : ''}" data-filter-gen="${g}">${genLabels[g] || g}</button>`).join('')}
+        </div>
+      </div>
+      ${resultHtml}
+    </div>`;
 }
 
 function renderAccountRecoCard(metrics) {
@@ -665,56 +664,46 @@ function renderAccountRecoCard(metrics) {
   return yayaBubble(`${templates[metrics.clasif]}`);
 }
 
-function renderRecommendationCard(sucRow) {
-  const lines = buildRecommendations(sucRow);
+function renderRecommendationCard(cubeRows) {
+  const lines = buildRecommendations(cubeRows);
   if (!lines.length) return '';
   return yayaBubble(`<ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`);
 }
 
-function dominantGen(genObj) {
-  if (!genObj) return null;
-  const entries = Object.entries(genObj);
-  if (!entries.length) return null;
-  entries.sort((a, b) => b[1].u - a[1].u);
-  return entries[0][0];
-}
-
-function buildRecommendations(sucRow) {
+function buildRecommendations(cubeRows) {
   const lines = [];
-  if (!sucRow) return lines;
+  if (!cubeRows || !cubeRows.length) return lines;
   const unLabels = t(state.lang, 'unLabels');
   const genLabels = t(state.lang, 'genLabels');
 
   // 1) Unidad de negocio líder + su género dominante
-  const unEntries = Object.entries(sucRow.un || {}).sort((a, b) => b[1].u - a[1].u);
-  if (unEntries.length) {
-    const [topUn] = unEntries[0];
-    const gen = sucRow.du && sucRow.du[topUn] ? dominantGen(sucRow.du[topUn].gen) : null;
-    if (gen) lines.push(L('recoUnGen', unLabels[topUn] || topUn, genLabels[gen] || gen));
+  const unBreak = cubeBreakdown(cubeRows, 'un');
+  if (unBreak.length) {
+    const topUn = unBreak[0].key;
+    const genForUn = cubeBreakdown(cubeFilterRows(cubeRows, { un: topUn }), 'gen');
+    if (genForUn.length) lines.push(L('recoUnGen', unLabels[topUn] || topUn, genLabels[genForUn[0].key] || genForUn[0].key));
     else lines.push(L('recoCat', unLabels[topUn] || topUn));
   }
 
   // 2) Producto de alta rotación con inventario en zona crítica, dentro de la categoría líder
-  let hotItemFound = false;
-  if (sucRow.cat && sucRow.cat.length) {
-    const topCat = sucRow.cat[0].cat;
-    const catFams = (sucRow.dc && sucRow.dc[topCat] && sucRow.dc[topCat].fam) || [];
+  const catBreak = cubeBreakdown(cubeRows, 'cat');
+  if (catBreak.length) {
+    const topCat = catBreak[0].key;
+    const catFams = cubeTopFamilias(cubeFilterRows(cubeRows, { cat: topCat }), 5);
     const hot = catFams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
-    if (hot) {
-      lines.push(L('recoHotItem', titleCase(hot.fam), catLabel(topCat)));
-      hotItemFound = true;
-    } else {
-      lines.push(L('recoCat', catLabel(topCat)));
-    }
+    if (hot) lines.push(L('recoHotItem', titleCase(hot.fam), catLabel(topCat)));
+    else lines.push(L('recoCat', catLabel(topCat)));
   }
 
   // 3) Alerta de posible quiebre de tallas, solo Calzado y Ropa
   for (const un of ['FW', 'APP']) {
-    const d = sucRow.du && sucRow.du[un];
-    if (!d || !d.fam || !d.fam.length) continue;
-    const low = d.fam.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
+    const unRows = cubeFilterRows(cubeRows, { un });
+    if (!unRows.length) continue;
+    const fams = cubeTopFamilias(unRows, 5);
+    const low = fams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
     if (low) {
-      const gen = dominantGen(d.gen);
+      const genForLow = cubeBreakdown(unRows, 'gen');
+      const gen = genForLow.length ? genForLow[0].key : null;
       lines.push(L('recoLowWohSizes', titleCase(low.fam), gen ? (genLabels[gen] || gen) : (unLabels[un] || un)));
       break;
     }
@@ -745,8 +734,8 @@ function attachHandlers() {
       const value = el.getAttribute('data-value');
       if (kind === 'region') { state.region = value; state.step = 'pais'; }
       else if (kind === 'pais') { state.pais = value; state.clasifFilter = null; state.clasifLegendOpen = false; state.step = 'cliente'; }
-      else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'cuenta'; }
-      else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.selectedUn = null; state.selectedCat = null; state.step = 'sucursal'; }
+      else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null; state.step = 'cuenta'; }
+      else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null; state.step = 'sucursal'; }
       pushHistory();
       render();
     });
@@ -773,7 +762,7 @@ function attachHandlers() {
   if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', () => {
     state.sucursal = null;
     state.periodo = null;
-    state.selectedUn = null; state.selectedCat = null;
+    state.filterUn = null; state.filterCat = null; state.filterGen = null;
     state.step = 'cuenta';
     pushHistory();
     render();
@@ -798,19 +787,24 @@ function attachHandlers() {
     render();
   });
 
-  document.querySelectorAll('[data-select-un]').forEach(el => {
+  document.querySelectorAll('[data-filter-un]').forEach(el => {
     el.addEventListener('click', () => {
-      const un = el.getAttribute('data-select-un');
-      state.selectedUn = state.selectedUn === un ? null : un;
-      state.selectedCat = null;
+      const un = el.getAttribute('data-filter-un');
+      state.filterUn = state.filterUn === un ? null : un;
       render();
     });
   });
-  document.querySelectorAll('[data-select-cat]').forEach(el => {
+  document.querySelectorAll('[data-filter-cat]').forEach(el => {
     el.addEventListener('click', () => {
-      const cat = el.getAttribute('data-select-cat');
-      state.selectedCat = state.selectedCat === cat ? null : cat;
-      state.selectedUn = null;
+      const cat = el.getAttribute('data-filter-cat');
+      state.filterCat = state.filterCat === cat ? null : cat;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-filter-gen]').forEach(el => {
+    el.addEventListener('click', () => {
+      const gen = el.getAttribute('data-filter-gen');
+      state.filterGen = state.filterGen === gen ? null : gen;
       render();
     });
   });
@@ -851,7 +845,7 @@ function shiftPeriod(dir) {
   const newIdx = idx + dir;
   if (newIdx >= 0 && newIdx < periods.length) {
     state.periodo = periods[newIdx];
-    state.selectedUn = null; state.selectedCat = null;
+    state.filterUn = null; state.filterCat = null; state.filterGen = null;
     render();
   }
 }

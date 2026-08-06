@@ -136,6 +136,72 @@ function avgOverTrailingWindow(series, periodo, months = 12) {
   const avg = avail.reduce((s, r) => s + r.u, 0) / nMonths;
   return { avg, nMonths };
 }
+
+// ============================================================
+// Cubo de detalle: cada sucursal trae, por periodo, una lista de filas
+// [UN, CAT, GEN, FAMILIA, u, v, e] con la granularidad más fina. A partir
+// de esto se puede filtrar y combinar por cualquier subconjunto de
+// UN/CAT/GEN (a diferencia de un solo filtro a la vez).
+// ============================================================
+
+/** Filtra las filas del cubo de un periodo según los filtros activos (los que sean null se ignoran) */
+function cubeFilterRows(rows, filters) {
+  if (!rows) return [];
+  return rows.filter(r =>
+    (!filters.un || r[0] === filters.un) &&
+    (!filters.cat || r[1] === filters.cat) &&
+    (!filters.gen || r[2] === filters.gen)
+  );
+}
+
+/** Suma unidades/valor/existencia de un conjunto de filas del cubo */
+function cubeTotals(rows) {
+  return rows.reduce((acc, r) => { acc.u += r[4]; acc.v += r[5]; acc.e += r[6]; return acc; }, { u: 0, v: 0, e: 0 });
+}
+
+/** Top-N familias dentro de un conjunto de filas del cubo (ya filtradas) */
+function cubeTopFamilias(rows, n = 3) {
+  const map = {};
+  for (const r of rows) {
+    const fam = r[3];
+    if (!map[fam]) map[fam] = { fam, u: 0, v: 0, e: 0 };
+    map[fam].u += r[4]; map[fam].v += r[5]; map[fam].e += r[6];
+  }
+  return Object.values(map).sort((a, b) => b.u - a.u).slice(0, n);
+}
+
+/** Breakdown por UN o por CAT (sumando sobre las demás dimensiones), para barras */
+function cubeBreakdown(rows, dim) {
+  const idx = dim === 'un' ? 0 : dim === 'cat' ? 1 : 2;
+  const map = {};
+  for (const r of rows) {
+    const key = r[idx];
+    if (!map[key]) map[key] = { key, u: 0, v: 0 };
+    map[key].u += r[4]; map[key].v += r[5];
+  }
+  return Object.values(map).sort((a, b) => b.u - a.u);
+}
+
+/**
+ * Promedio mensual de los últimos `months` meses para una combinación de
+ * filtros (UN/CAT/GEN, cualquiera puede ir vacío). El denominador cuenta
+ * los meses en que la sucursal reportó datos (no en los que la combinación
+ * específica tuvo cero, que sí cuenta como dato real).
+ */
+function cubeAvgTrailing(store, filters, periodo, months = 12) {
+  const activePeriods = new Set(store.periods.map(r => r.p));
+  let sum = 0, nMonths = 0;
+  for (let k = 0; k < months; k++) {
+    const p = periodoAddMonths(periodo, -k);
+    if (!activePeriods.has(p)) continue;
+    nMonths++;
+    const rows = store.cube[String(p)];
+    if (rows) sum += cubeTotals(cubeFilterRows(rows, filters)).u;
+  }
+  if (nMonths === 0) return { avg: null, nMonths: 0 };
+  return { avg: sum / nMonths, nMonths };
+}
+
 function recentForm(fullHistory, periodo, n = 6) {
   const upTo = fullHistory.filter(h => h.periodo <= periodo).slice(-n);
   return upTo;

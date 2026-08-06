@@ -95,18 +95,13 @@ function mergeSucursalPeriodo(base, delta) {
     if (!base[cliente]) base[cliente] = {};
     for (const sucursal in delta[cliente]) {
       const incoming = delta[cliente][sucursal];
-      if (!base[cliente][sucursal]) base[cliente][sucursal] = { periods: [], unHist: {}, catHist: {} };
+      if (!base[cliente][sucursal]) base[cliente][sucursal] = { periods: [], cube: {} };
       const store = base[cliente][sucursal];
 
       mergeSeriesByPeriod(store.periods, incoming.periods || []);
 
-      for (const un in (incoming.unHist || {})) {
-        store.unHist[un] = store.unHist[un] || [];
-        mergeSeriesByPeriod(store.unHist[un], incoming.unHist[un]);
-      }
-      for (const cat in (incoming.catHist || {})) {
-        store.catHist[cat] = store.catHist[cat] || [];
-        mergeSeriesByPeriod(store.catHist[cat], incoming.catHist[cat]);
+      for (const p in (incoming.cube || {})) {
+        store.cube[p] = incoming.cube[p]; // el mes nuevo reemplaza por completo el detalle de ese periodo
       }
     }
   }

@@ -48,32 +48,11 @@ async function parseUploadedFile(file) {
   }
 
   // Acumuladores
-  const clientePeriodo = {};  // cliente -> {region,pais,hist:[{p,u,v,e}]}
-  const sucursalTotales = {}; // cliente -> sucursal -> periodo -> {u,v,e}
-  const sucursalUN = {};      // cliente -> sucursal -> periodo -> UN -> {u,v}
-  const sucursalCAT = {};     // cliente -> sucursal -> periodo -> CAT -> {u,v}
-  const sucursalFAM = {};     // cliente -> sucursal -> periodo -> familia -> {u,v,e}
-  const unCat = {};   // c->s->p->UN->CAT->{u,v}
-  const unGen = {};   // c->s->p->UN->GEN->{u,v}
-  const unFam = {};   // c->s->p->UN->fam->{u,v,e}
-  const catUn = {};   // c->s->p->CAT->UN->{u,v}
-  const catGen = {};  // c->s->p->CAT->GEN->{u,v}
-  const catFam = {};  // c->s->p->CAT->fam->{u,v,e}
-  const unHistAcc = {};   // c->s->UN->periodo->{u,v}  (historial completo, no solo top-N)
-  const catHistAcc = {};  // c->s->CAT->periodo->{u,v}
+  const clientePeriodo = {};   // cliente -> {region,pais,hist:{periodo:{p,u,v,e}}}
+  const sucursalTotales = {};  // cliente -> sucursal -> periodo -> {u,v,e}
+  const cube = {};             // cliente -> sucursal -> periodo -> "UN|CAT|GEN|FAM" -> {u,v,e}
   const periodosVistos = new Set();
   const navDelta = {};
-
-  function bump(map, keys, unidades, valor, existencia) {
-    let node = map;
-    for (let i = 0; i < keys.length - 1; i++) {
-      node[keys[i]] = node[keys[i]] || {};
-      node = node[keys[i]];
-    }
-    const last = keys[keys.length - 1];
-    node[last] = node[last] || { u: 0, v: 0, e: 0 };
-    node[last].u += unidades; node[last].v += valor; node[last].e += existencia;
-  }
 
   for (const r of rows) {
     const mes = Number(r[cols.mes]);
@@ -89,6 +68,7 @@ async function parseUploadedFile(file) {
     const sucursal = String(r[cols.sucursal] ?? '').trim();
     const marca = r[cols.marca];
     const cat = String(r[cols.cat] ?? '').trim();
+    const gen = String(r[cols.gen] ?? '').trim();
     const familia = String(r[cols.familia] ?? 'SIN SILUETA').trim();
     const unidades = Number(r[cols.unidades]) || 0;
     const valor = Number(r[cols.valor]) || 0;
@@ -111,40 +91,15 @@ async function parseUploadedFile(file) {
     st.u += unidades; st.v += valor; st.e += existencia;
     sucursalTotales[cliente][sucursal][periodo] = st;
 
-    // UN
-    sucursalUN[cliente] = sucursalUN[cliente] || {};
-    sucursalUN[cliente][sucursal] = sucursalUN[cliente][sucursal] || {};
-    sucursalUN[cliente][sucursal][periodo] = sucursalUN[cliente][sucursal][periodo] || {};
-    const un_ = sucursalUN[cliente][sucursal][periodo][un] || { u: 0, v: 0 };
-    un_.u += unidades; un_.v += valor;
-    sucursalUN[cliente][sucursal][periodo][un] = un_;
-
-    // CAT
-    sucursalCAT[cliente] = sucursalCAT[cliente] || {};
-    sucursalCAT[cliente][sucursal] = sucursalCAT[cliente][sucursal] || {};
-    sucursalCAT[cliente][sucursal][periodo] = sucursalCAT[cliente][sucursal][periodo] || {};
-    const cat_ = sucursalCAT[cliente][sucursal][periodo][cat] || { u: 0, v: 0 };
-    cat_.u += unidades; cat_.v += valor;
-    sucursalCAT[cliente][sucursal][periodo][cat] = cat_;
-
-    // Familia
-    sucursalFAM[cliente] = sucursalFAM[cliente] || {};
-    sucursalFAM[cliente][sucursal] = sucursalFAM[cliente][sucursal] || {};
-    sucursalFAM[cliente][sucursal][periodo] = sucursalFAM[cliente][sucursal][periodo] || {};
-    const fam_ = sucursalFAM[cliente][sucursal][periodo][familia] || { u: 0, v: 0, e: 0 };
-    fam_.u += unidades; fam_.v += valor; fam_.e += existencia;
-    sucursalFAM[cliente][sucursal][periodo][familia] = fam_;
-
-    // Detalle cruzado (para botones interactivos UN / CAT)
-    const gen = String(r[cols.gen] ?? '').trim();
-    bump(unCat, [cliente, sucursal, periodo, un, cat], unidades, valor, 0);
-    bump(unGen, [cliente, sucursal, periodo, un, gen], unidades, valor, 0);
-    bump(unFam, [cliente, sucursal, periodo, un, familia], unidades, valor, existencia);
-    bump(catUn, [cliente, sucursal, periodo, cat, un], unidades, valor, 0);
-    bump(catGen, [cliente, sucursal, periodo, cat, gen], unidades, valor, 0);
-    bump(catFam, [cliente, sucursal, periodo, cat, familia], unidades, valor, existencia);
-    bump(unHistAcc, [cliente, sucursal, un, periodo], unidades, valor, 0);
-    bump(catHistAcc, [cliente, sucursal, cat, periodo], unidades, valor, 0);
+    // Cubo: una fila por combinación exacta UN/CAT/GEN/FAMILIA, para poder
+    // filtrar y combinar cualquier subconjunto de esas 3 dimensiones.
+    cube[cliente] = cube[cliente] || {};
+    cube[cliente][sucursal] = cube[cliente][sucursal] || {};
+    cube[cliente][sucursal][periodo] = cube[cliente][sucursal][periodo] || {};
+    const cubeKey = un + '|' + cat + '|' + gen + '|' + familia;
+    const cn = cube[cliente][sucursal][periodo][cubeKey] || { un, cat, gen, familia, u: 0, v: 0, e: 0 };
+    cn.u += unidades; cn.v += valor; cn.e += existencia;
+    cube[cliente][sucursal][periodo][cubeKey] = cn;
 
     // Nav
     navDelta[region] = navDelta[region] || {};
@@ -163,78 +118,24 @@ async function parseUploadedFile(file) {
     };
   }
 
-  // Construir sucursal_periodo final: por cliente/sucursal, {periods, unHist, catHist}
+  // Construir sucursal_periodo final: por cliente/sucursal, {periods, cube}
   const sucursalPeriodoOut = {};
   for (const cliente in sucursalTotales) {
     sucursalPeriodoOut[cliente] = {};
     for (const sucursal in sucursalTotales[cliente]) {
       const periodsArr = [];
+      const cubeOut = {};
       for (const periodo of Object.keys(sucursalTotales[cliente][sucursal])) {
         const p = Number(periodo);
         const tot = sucursalTotales[cliente][sucursal][periodo];
-        const unObj = sucursalUN[cliente]?.[sucursal]?.[periodo] || {};
-        const catObj = sucursalCAT[cliente]?.[sucursal]?.[periodo] || {};
-        const famObj = sucursalFAM[cliente]?.[sucursal]?.[periodo] || {};
+        periodsArr.push({ p, u: tot.u, v: Math.round(tot.v * 100) / 100, e: Math.round(tot.e * 100) / 100 });
 
-        const catTop = Object.entries(catObj)
-          .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
-          .map(([cat, v]) => ({ cat, u: v.u, v: Math.round(v.v * 100) / 100 }));
-        const famTop = Object.entries(famObj)
-          .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
-          .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
-
-        // Detalle por UN: para cada UN presente, sus categorías/género/familias top
-        const du = {};
-        const ucNode = unCat[cliente]?.[sucursal]?.[periodo] || {};
-        const ugNode = unGen[cliente]?.[sucursal]?.[periodo] || {};
-        const ufNode = unFam[cliente]?.[sucursal]?.[periodo] || {};
-        for (const un in unObj) {
-          const catList = Object.entries(ucNode[un] || {})
-            .sort((a, b) => b[1].u - a[1].u).slice(0, 4)
-            .map(([cat, v]) => ({ cat, u: v.u, v: Math.round(v.v * 100) / 100 }));
-          const genObj = {};
-          for (const [gen, v] of Object.entries(ugNode[un] || {})) genObj[gen] = { u: v.u, v: Math.round(v.v * 100) / 100 };
-          const famList = Object.entries(ufNode[un] || {})
-            .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
-            .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
-          du[un] = { cat: catList, gen: genObj, fam: famList };
-        }
-
-        // Detalle por CAT: solo para las top-3 categorías mostradas
-        const dc = {};
-        const cuNode = catUn[cliente]?.[sucursal]?.[periodo] || {};
-        const cgNode = catGen[cliente]?.[sucursal]?.[periodo] || {};
-        const cfNode = catFam[cliente]?.[sucursal]?.[periodo] || {};
-        for (const { cat } of catTop) {
-          const unList = Object.entries(cuNode[cat] || {})
-            .sort((a, b) => b[1].u - a[1].u)
-            .map(([un, v]) => ({ un, u: v.u, v: Math.round(v.v * 100) / 100 }));
-          const genObj = {};
-          for (const [gen, v] of Object.entries(cgNode[cat] || {})) genObj[gen] = { u: v.u, v: Math.round(v.v * 100) / 100 };
-          const famList = Object.entries(cfNode[cat] || {})
-            .sort((a, b) => b[1].u - a[1].u).slice(0, 3)
-            .map(([fam, v]) => ({ fam, u: v.u, v: Math.round(v.v * 100) / 100, e: Math.round((v.e || 0) * 100) / 100 }));
-          dc[cat] = { un: unList, gen: genObj, fam: famList };
-        }
-
-        periodsArr.push({
-          p, u: tot.u, v: Math.round(tot.v * 100) / 100, e: Math.round(tot.e * 100) / 100,
-          un: unObj, cat: catTop, fam: famTop, du, dc
-        });
+        const cubeNode = cube[cliente]?.[sucursal]?.[periodo] || {};
+        cubeOut[periodo] = Object.values(cubeNode)
+          .filter(row => row.u !== 0 || row.e !== 0)
+          .map(row => [row.un, row.cat, row.gen, row.familia, row.u, Math.round(row.v * 100) / 100, Math.round(row.e * 100) / 100]);
       }
-
-      const unHist = {};
-      for (const un in (unHistAcc[cliente]?.[sucursal] || {})) {
-        unHist[un] = Object.entries(unHistAcc[cliente][sucursal][un])
-          .map(([p, v]) => ({ p: Number(p), u: v.u, v: Math.round(v.v * 100) / 100 }));
-      }
-      const catHist = {};
-      for (const cat in (catHistAcc[cliente]?.[sucursal] || {})) {
-        catHist[cat] = Object.entries(catHistAcc[cliente][sucursal][cat])
-          .map(([p, v]) => ({ p: Number(p), u: v.u, v: Math.round(v.v * 100) / 100 }));
-      }
-
-      sucursalPeriodoOut[cliente][sucursal] = { periods: periodsArr, unHist, catHist };
+      sucursalPeriodoOut[cliente][sucursal] = { periods: periodsArr, cube: cubeOut };
     }
   }
 
@@ -271,22 +172,13 @@ function splitByPeriodo(parsed) {
         const store = parsed.sucursal_periodo[cliente][sucursal];
         const periods = store.periods.filter(r => r.p === periodo);
         if (!periods.length) continue;
-        const unHist = {};
-        for (const un in store.unHist) {
-          const rows = store.unHist[un].filter(r => r.p === periodo);
-          if (rows.length) unHist[un] = rows;
-        }
-        const catHist = {};
-        for (const cat in store.catHist) {
-          const rows = store.catHist[cat].filter(r => r.p === periodo);
-          if (rows.length) catHist[cat] = rows;
-        }
+        const cube = {};
+        if (store.cube[periodo]) cube[periodo] = store.cube[periodo];
         sucursal_periodo[cliente] = sucursal_periodo[cliente] || {};
-        sucursal_periodo[cliente][sucursal] = { periods, unHist, catHist };
+        sucursal_periodo[cliente][sucursal] = { periods, cube };
       }
     }
     payloads.push({ periodo, cliente_periodo, sucursal_periodo, nav: parsed.nav });
   }
   return payloads;
 }
-

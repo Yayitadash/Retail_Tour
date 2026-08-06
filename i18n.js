@@ -63,6 +63,9 @@ const I18N = {
     familiesIn: 'Familias/Siluetas',
     businessUnitsIn: 'Unidades de negocio',
     tapToExplore: 'Toca para ver el detalle',
+    exploreTitle: '¿Qué te gustaría explorar en esta sucursal?',
+    exploreHint: 'Toca una o más opciones arriba para combinarlas (por ejemplo, Calzado + RNG + Hombre).',
+    exploreNoData: 'No hay datos para esa combinación este mes.',
     whatIconsMean: '¿Qué significa cada ícono?',
     hideIconsMean: 'Ocultar significado de íconos',
     recoTemplates: {
@@ -164,6 +167,9 @@ const I18N = {
     familiesIn: 'Families/Silhouettes',
     businessUnitsIn: 'Business units',
     tapToExplore: 'Tap to see the detail',
+    exploreTitle: 'What would you like to explore in this store?',
+    exploreHint: 'Tap one or more options above to combine them (e.g. Footwear + RNG + Men).',
+    exploreNoData: 'No data for that combination this month.',
     whatIconsMean: 'What does each icon mean?',
     hideIconsMean: 'Hide icon meanings',
     recoTemplates: {
