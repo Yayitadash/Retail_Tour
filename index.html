@@ -106,6 +106,7 @@
   }
   .step-nav-btn:disabled { color: var(--text-soft); opacity: 0.4; cursor: default; }
   .step-nav-btn:not(:disabled):active { background: var(--paper); }
+  .step-nav-btn-guide { flex: 0 0 56px; font-size: 17px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 
   /* ---------- View ---------- */
   .view { flex: 1; padding: 22px 18px 40px; }
@@ -165,6 +166,11 @@
   .clasif-long-text { display: flex; flex-direction: column; gap: 1px; }
   .clasif-long-name { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--c); }
   .clasif-long-desc { font-size: 11.5px; color: var(--text-soft); line-height: 1.3; }
+
+  .clasif-guide { margin-top: 28px; padding-top: 20px; border-top: 1px dashed var(--line); }
+  .clasif-long-btn.clasif-long-static { cursor: default; }
+  .clasif-long-btn.clasif-long-static:hover { border-color: var(--line); }
+  .clasif-guide-modal { max-height: 85vh; overflow-y: auto; }
 
   .filter-status-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; padding: 0 2px; }
   .filter-status-count { font-family: var(--font-mono); font-size: 12px; color: var(--text-soft); }

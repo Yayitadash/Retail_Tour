@@ -183,18 +183,33 @@ function render() {
     <div id="uploadModal" class="modal-backdrop hidden">
       ${renderUploadModal()}
     </div>
+    <div id="clasifGuideModal" class="modal-backdrop hidden">
+      ${renderClasifGuideModal()}
+    </div>
     ${renderStepNavBar()}
   `;
   attachHandlers();
 }
 
+function renderClasifGuideModal() {
+  return `
+    <div class="modal clasif-guide-modal">
+      <div class="modal-head">
+        <span>${L('clasifGuideTitle')}</span>
+        <button id="closeClasifGuide" class="modal-close">✕</button>
+      </div>
+      ${renderClasifGuide()}
+    </div>`;
+}
+
 function renderStepNavBar() {
-  if (state.navStack.length <= 1) return '';
+  if (state.step === 'welcome' || state.step === 'greeting') return '';
   const canBack = state.navPos > 0;
   const canForward = state.navPos < state.navStack.length - 1;
   return `
     <div class="step-nav-bar">
       <button class="step-nav-btn" id="navBackBtn" ${canBack ? '' : 'disabled'}>‹ ${L('backWord')}</button>
+      <button class="step-nav-btn step-nav-btn-guide" id="clasifGuideBtn" title="${L('clasifGuideTitle')}">📖</button>
       <button class="step-nav-btn" id="navForwardBtn" ${canForward ? '' : 'disabled'}>${L('forwardWord')} ›</button>
     </div>`;
 }
@@ -224,6 +239,23 @@ function renderRegionStep() {
           <span class="pick-meta">${Object.keys(state.nav[r]).length} ${L('countries')}</span>
         </button>
       `).join('')}
+    </div>
+    ${renderClasifGuide()}`;
+}
+
+function renderClasifGuide() {
+  const buttons = CLASIF_ORDER.map(k => `
+    <div class="clasif-long-btn clasif-long-static" style="--c:${CLASIFICACIONES[k].color}">
+      <span class="clasif-long-icon">${CLASIFICACIONES[k].icon}</span>
+      <span class="clasif-long-text">
+        <span class="clasif-long-name">${classifLabel(k, state.lang)}</span>
+        <span class="clasif-long-desc">${classifDesc(k, state.lang)}</span>
+      </span>
+    </div>`).join('');
+  return `
+    <div class="clasif-guide">
+      ${yayaBubble(L('clasifGuideIntro'))}
+      <div class="clasif-long-list">${buttons}</div>
     </div>`;
 }
 
@@ -248,13 +280,20 @@ function renderPaisStep() {
 // ---------- Step: Cliente (elegir cuenta) ----------
 const CLASIF_ORDER = ['Las Estrellas', 'Las Aceleradas', 'Las Robustas', 'Zona de Riesgo', 'Desabastecidas', 'Riesgo Crítico'];
 
+function lastKnownClasif(hist) {
+  if (!hist || !hist.length) return null;
+  const fullHist = computeFullHistory(hist);
+  for (let i = fullHist.length - 1; i >= 0; i--) {
+    if (fullHist[i].clasif) return fullHist[i].clasif;
+  }
+  return null;
+}
+
 function renderClienteStep() {
   const clientes = Object.keys(state.nav[state.region][state.pais]).sort();
   const clientesConClasif = clientes.map(c => {
     const cd = state.clientePeriodo[c];
-    const last = cd && cd.hist.length ? cd.hist[cd.hist.length - 1] : null;
-    const metrics = cd && last ? computeMetricsForPeriod(cd.hist, last.p) : null;
-    return { c, clasif: metrics ? metrics.clasif : null };
+    return { c, clasif: lastKnownClasif(cd && cd.hist) };
   });
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
@@ -771,6 +810,12 @@ function attachHandlers() {
   if (closeUpload) closeUpload.addEventListener('click', () => modal.classList.add('hidden'));
   const fileInput = document.getElementById('fileInput');
   if (fileInput) fileInput.addEventListener('change', handleFileUpload);
+
+  const clasifGuideBtn = document.getElementById('clasifGuideBtn');
+  const clasifGuideModal = document.getElementById('clasifGuideModal');
+  if (clasifGuideBtn) clasifGuideBtn.addEventListener('click', () => clasifGuideModal.classList.remove('hidden'));
+  const closeClasifGuide = document.getElementById('closeClasifGuide');
+  if (closeClasifGuide) closeClasifGuide.addEventListener('click', () => clasifGuideModal.classList.add('hidden'));
 
   const langToggle = document.getElementById('langToggle');
   if (langToggle) langToggle.addEventListener('click', () => {
