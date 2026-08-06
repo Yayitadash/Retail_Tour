@@ -5,6 +5,11 @@
 const I18N = {
   es: {
     boot: 'Preparándome para acompañarte en tu recorrido…',
+    accessTitle: 'Acceso privado',
+    accessSub: 'Escribe la clave que te compartió Yaya para entrar.',
+    accessPlaceholder: 'Clave',
+    accessButton: 'Entrar',
+    accessError: 'Esa clave no es correcta. Inténtalo de nuevo.',
     welcomeTitle: '¿Cómo te llamas?',
     welcomeSub: 'Yaya quiere saber con quién va a hacer el recorrido.',
     namePlaceholder: 'Tu nombre',
@@ -109,6 +114,11 @@ const I18N = {
   },
   en: {
     boot: 'Getting ready to join you on your tour…',
+    accessTitle: 'Private access',
+    accessSub: 'Enter the code Yaya shared with you to get in.',
+    accessPlaceholder: 'Access code',
+    accessButton: 'Enter',
+    accessError: 'That code isn\'t right. Try again.',
     welcomeTitle: "What's your name?",
     welcomeSub: 'Yaya wants to know who she’s touring with today.',
     namePlaceholder: 'Your name',

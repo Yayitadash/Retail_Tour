@@ -4,7 +4,7 @@
 
 // Yaya tiene un solo ícono: su foto real.
 function getYayaAvatar() {
-  return `<img src="./images/yaya.png" alt="Yaya" class="yaya-photo" />`;
+  return `<img src="./images/yaya.png" alt="Yaya" class="yaya-photo" style="width:100%;height:100%;object-fit:cover;display:block;" />`;
 }
 
 function loadUser() {
@@ -21,5 +21,11 @@ function loadLang() {
 }
 function saveLang(lang) {
   localStorage.setItem('rt_lang', lang);
+}
+function hasAccess() {
+  return localStorage.getItem('rt_access') === 'granted';
+}
+function saveAccess() {
+  localStorage.setItem('rt_access', 'granted');
 }
 
