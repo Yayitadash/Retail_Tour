@@ -516,6 +516,7 @@ function renderStoreCard(sucRow, sucStore, periodo) {
       <div class="un-bars">
         ${unEntries.map(([un, v]) => `
           <button class="un-bar-row ${state.selectedUn === un ? 'active' : ''}" data-select-un="${un}">
+            ${state.selectedUn === un ? `<span class="bar-check">✓</span>` : ''}
             <span class="un-bar-label">${unLabels[un] || un}</span>
             <div class="un-bar-track"><div class="un-bar-fill" style="width:${(v.u / totalUnUnits * 100).toFixed(0)}%"></div></div>
             <span class="un-bar-pct">${(v.u / totalUnUnits * 100).toFixed(0)}%</span>
@@ -526,21 +527,19 @@ function renderStoreCard(sucRow, sucStore, periodo) {
       ${catEntries.length ? `
         <div class="chip-row">
           <span class="chip-row-label">${L('concentratedIn')}...</span>
-          <ul class="cat-list">
+          <div class="un-bars">
             ${catEntries.map(c => `
-              <li>
-                <button class="cat-list-btn ${state.selectedCat === c.cat ? 'active' : ''}" data-select-cat="${escapeAttr(c.cat)}">
-                  ${catLabel(c.cat)} <span class="cat-pct">(${(c.u / totalCatUnits * 100).toFixed(0)}%)</span>
-                </button>
-              </li>`).join('')}
-          </ul>
+              <button class="un-bar-row cat-bar-row ${state.selectedCat === c.cat ? 'active' : ''}" data-select-cat="${escapeAttr(c.cat)}">
+                ${state.selectedCat === c.cat ? `<span class="bar-check">✓</span>` : ''}
+                <span class="un-bar-label">${catLabel(c.cat)}</span>
+                <div class="un-bar-track"><div class="un-bar-fill cat-fill" style="width:${(c.u / totalCatUnits * 100).toFixed(0)}%"></div></div>
+                <span class="un-bar-pct">${(c.u / totalCatUnits * 100).toFixed(0)}%</span>
+              </button>
+            `).join('')}
+          </div>
         </div>` : ''}
       ${renderDetailPanel(sucRow)}
-      ${sucRow.fam && sucRow.fam.length ? `
-        <div class="chip-row">
-          <span class="chip-row-label">${L('leadingFamilies')}</span>
-          ${renderFamList(sucRow.fam)}
-        </div>` : ''}
+      ${renderFamSection(sucRow)}
     </div>`;
 }
 
@@ -562,6 +561,27 @@ function renderDynamicAvg(sucStore, periodo) {
     ? L('avgSalesScoped', fmtUnits(avg), scopeLabel, nMonths)
     : L('avgSalesLine', fmtUnits(avg), nMonths);
   return `<div class="dynamic-avg">${line}</div>`;
+}
+
+function renderFamSection(sucRow) {
+  const unLabels = t(state.lang, 'unLabels');
+  let famArr, scopeLabel;
+  if (state.selectedUn && sucRow.du && sucRow.du[state.selectedUn]) {
+    famArr = sucRow.du[state.selectedUn].fam;
+    scopeLabel = unLabels[state.selectedUn] || state.selectedUn;
+  } else if (state.selectedCat && sucRow.dc && sucRow.dc[state.selectedCat]) {
+    famArr = sucRow.dc[state.selectedCat].fam;
+    scopeLabel = catLabel(state.selectedCat);
+  } else {
+    famArr = sucRow.fam;
+    scopeLabel = null;
+  }
+  if (!famArr || !famArr.length) return '';
+  return `
+    <div class="chip-row">
+      <span class="chip-row-label">${scopeLabel ? L('leadingFamiliesScoped', scopeLabel) : L('leadingFamilies')}</span>
+      ${renderFamList(famArr)}
+    </div>`;
 }
 
 function renderFamList(famArr) {
@@ -613,11 +633,6 @@ function renderDetailPanel(sucRow) {
             <span class="detail-section-label">${L('genderIn')}</span>
             ${renderGenBreakdown(d.gen)}
           </div>` : ''}
-        ${d.fam && d.fam.length ? `
-          <div class="detail-section">
-            <span class="detail-section-label">${L('familiesIn')}</span>
-            ${renderFamList(d.fam)}
-          </div>` : ''}
       </div>`;
   }
   if (state.selectedCat && sucRow.dc && sucRow.dc[state.selectedCat]) {
@@ -636,11 +651,6 @@ function renderDetailPanel(sucRow) {
           <div class="detail-section">
             <span class="detail-section-label">${L('genderIn')}</span>
             ${renderGenBreakdown(d.gen)}
-          </div>` : ''}
-        ${d.fam && d.fam.length ? `
-          <div class="detail-section">
-            <span class="detail-section-label">${L('familiesIn')}</span>
-            ${renderFamList(d.fam)}
           </div>` : ''}
       </div>`;
   }
