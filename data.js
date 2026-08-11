@@ -104,12 +104,15 @@ async function ensureClienteDataLoaded(state, clienteNames) {
     if (fb) {
       await Promise.all(clientesFirestore.map(async cliente => {
         try {
-          const snap = await fb.getDoc(fb.doc(fb.db, 'monthly_uploads_by_client', clientDocId(cliente)));
-          if (snap.exists()) {
-            const data = snap.data();
+          // Cada cliente tiene su propia "subcolección" con un documento
+          // chico por mes (no un solo documento gigante que va creciendo).
+          const periodsCol = fb.collection(fb.db, 'monthly_uploads_by_client', clientDocId(cliente), 'periods');
+          const snap = await fb.getDocs(periodsCol);
+          snap.forEach(docSnap => {
+            const data = docSnap.data();
             mergeClientePeriodo(state.clientePeriodo, data.cliente_periodo || {});
             mergeSucursalPeriodo(state.sucursalPeriodo, data.sucursal_periodo || {});
-          }
+          });
         } catch (err) {
           console.warn('No se pudo traer Firestore para', cliente, err);
         }
@@ -175,16 +178,50 @@ function mergeNav(base, delta) {
 }
 
 /**
- * Guarda los meses de UN cliente en Firestore, en un solo documento chico
- * (no todos los clientes juntos como antes). `payload` tiene la forma
- * { cliente, cliente_periodo, sucursal_periodo, nav }. Además actualiza un
- * pequeño "aviso" de navegación por si esa cuenta o sucursal es nueva, para
- * que aparezca de inmediato en la lista sin tener que cargar todo Firestore.
+ * Guarda los meses de UN cliente en Firestore — un documento chico POR MES
+ * dentro de una subcolección propia de ese cliente (no uno solo que va
+ * acumulando y podría crecer demasiado con los meses). `payload` tiene la
+ * forma { cliente, cliente_periodo, sucursal_periodo, nav } y puede traer
+ * varios meses a la vez; cada uno se guarda en su propio documento. Además
+ * actualiza un pequeño "aviso" de navegación por si esa cuenta o sucursal
+ * es nueva, para que aparezca de inmediato en la lista sin cargar todo
+ * Firestore.
  */
 async function saveClientUpload(payload) {
   const fb = window.__fb || await initFirebase();
-  const docId = clientDocId(payload.cliente);
-  await fb.setDoc(fb.doc(fb.db, 'monthly_uploads_by_client', docId), payload);
+  const clienteId = clientDocId(payload.cliente);
+
+  // Separar el payload del cliente en un documento por cada periodo que traiga
+  const periodosDelCliente = new Set();
+  for (const c in payload.cliente_periodo) for (const h of payload.cliente_periodo[c].hist) periodosDelCliente.add(h.p);
+  for (const c in payload.sucursal_periodo) {
+    for (const s in payload.sucursal_periodo[c]) {
+      for (const p of payload.sucursal_periodo[c][s].periods) periodosDelCliente.add(p.p);
+    }
+  }
+
+  const writes = Array.from(periodosDelCliente).map(async periodo => {
+    const cliente_periodo = {};
+    for (const c in payload.cliente_periodo) {
+      const rows = payload.cliente_periodo[c].hist.filter(h => h.p === periodo);
+      if (rows.length) cliente_periodo[c] = { region: payload.cliente_periodo[c].region, pais: payload.cliente_periodo[c].pais, hist: rows };
+    }
+    const sucursal_periodo = {};
+    for (const c in payload.sucursal_periodo) {
+      for (const s in payload.sucursal_periodo[c]) {
+        const store = payload.sucursal_periodo[c][s];
+        const periods = store.periods.filter(p => p.p === periodo);
+        if (!periods.length) continue;
+        const cube = {};
+        if (store.cube[periodo]) cube[periodo] = store.cube[periodo];
+        sucursal_periodo[c] = sucursal_periodo[c] || {};
+        sucursal_periodo[c][s] = { periods, cube };
+      }
+    }
+    const docRef = fb.doc(fb.db, 'monthly_uploads_by_client', clienteId, 'periods', String(periodo));
+    await fb.setDoc(docRef, { cliente: payload.cliente, periodo, cliente_periodo, sucursal_periodo });
+  });
+  await Promise.all(writes);
 
   const navRef = fb.doc(fb.db, 'monthly_uploads_meta', 'nav_updates');
   let existingNav = {};
