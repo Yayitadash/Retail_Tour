@@ -3,6 +3,12 @@
 // Combina el histórico base (JSON estático) con los meses nuevos
 // que se hayan subido a Firestore, para que la vista sea la misma
 // sin importar desde qué dispositivo se abra la app.
+//
+// IMPORTANTE: los datos de sucursales (~77MB en total) NO se cargan
+// todos de una vez — eso hacía que Safari en iPhone se quedara sin
+// memoria y cerrara la página ("A problem repeatedly occurred").
+// En vez de eso, se cargan "por partes" (shards) solo cuando el
+// vendedor realmente navega a las cuentas de esa parte.
 // ============================================================
 
 const firebaseConfig = {
@@ -32,42 +38,67 @@ async function fetchJSON(path) {
 }
 
 /**
- * Carga nav.json, cliente_periodo.json, los 4 archivos de sucursal_periodo
- * (partidos por región para no pasar el límite de 25MB de GitHub) y
- * los documentos de Firestore (monthly_uploads), y devuelve todo
- * fusionado en memoria.
+ * Carga solo lo liviano al iniciar: nav.json, cliente_periodo.json, el
+ * mapa de qué cliente vive en qué archivo (shard_map.json), y los meses
+ * subidos por Firestore (se guardan en crudo para poder re-aplicarlos
+ * cada vez que se cargue un shard nuevo). NO carga los archivos grandes
+ * de sucursales todavía — eso pasa bajo demanda con ensureShardsLoaded().
  */
-// La data se divide en varios archivos chicos (ninguno pasa de ~10MB) para
-// no acercarse al límite de subida de GitHub. Si agregas cuentas nuevas y
-// algún archivo empieza a pesar mucho, avísame para volver a repartir.
-const SUCURSAL_SHARDS = ['CEN_1', 'CEN_2', 'CEN_3', 'CEN_4', 'COL_1', 'COL_2', 'CAR', 'VEN_1', 'VEN_2'];
-
 async function loadAllData() {
-  const [nav, clientePeriodo, ...sucursalParts] = await Promise.all([
+  const [nav, clientePeriodo, shardMap] = await Promise.all([
     fetchJSON('./data/nav.json'),
     fetchJSON('./data/cliente_periodo.json'),
-    ...SUCURSAL_SHARDS.map(r => fetchJSON(`./data/sucursal_periodo_${r}.json`))
+    fetchJSON('./data/shard_map.json')
   ]);
-  const sucursalPeriodo = Object.assign({}, ...sucursalParts);
 
-  let uploads = [];
+  let rawUploads = [];
   try {
     const fb = await initFirebase();
     const snap = await fb.getDocs(fb.collection(fb.db, 'monthly_uploads'));
-    snap.forEach(d => uploads.push(d.data()));
+    snap.forEach(d => rawUploads.push(d.data()));
   } catch (err) {
     console.warn('No se pudo conectar a Firestore, se usará solo el histórico base:', err);
   }
+  rawUploads.sort((a, b) => a.periodo - b.periodo);
 
-  // Fusionar cada upload (meses nuevos ganan sobre el histórico base para ese mismo periodo)
-  uploads.sort((a, b) => a.periodo - b.periodo);
-  for (const up of uploads) {
+  // cliente_periodo y nav son livianos: los meses subidos se aplican de una vez
+  for (const up of rawUploads) {
     mergeClientePeriodo(clientePeriodo, up.cliente_periodo || {});
-    mergeSucursalPeriodo(sucursalPeriodo, up.sucursal_periodo || {});
     mergeNav(nav, up.nav || {});
   }
 
-  return { nav, clientePeriodo, sucursalPeriodo, uploadedPeriods: uploads.map(u => u.periodo) };
+  return {
+    nav, clientePeriodo, shardMap, rawUploads,
+    sucursalPeriodo: {},       // se va llenando con ensureShardsLoaded()
+    loadedShards: new Set()
+  };
+}
+
+/**
+ * Se asegura de que los archivos de sucursales de estos clientes ya estén
+ * cargados en memoria (state.sucursalPeriodo). Si algún shard todavía no
+ * se ha pedido, lo trae y lo fusiona — y de paso vuelve a aplicar los
+ * meses de Firestore por si tenían datos de esos clientes.
+ */
+async function ensureShardsLoaded(state, clienteNames) {
+  const needed = new Set();
+  for (const cliente of clienteNames) {
+    const shard = state.shardMap[cliente];
+    if (shard && !state.loadedShards.has(shard)) needed.add(shard);
+  }
+  if (!needed.size) return;
+
+  const shardsArr = Array.from(needed);
+  const parts = await Promise.all(shardsArr.map(s => fetchJSON(`./data/sucursal_periodo_${s}.json`)));
+  for (let i = 0; i < shardsArr.length; i++) {
+    mergeSucursalPeriodo(state.sucursalPeriodo, parts[i]);
+    state.loadedShards.add(shardsArr[i]);
+  }
+
+  // Re-aplicar los meses de Firestore para que cubran también lo recién cargado
+  for (const up of state.rawUploads) {
+    mergeSucursalPeriodo(state.sucursalPeriodo, up.sucursal_periodo || {});
+  }
 }
 
 function mergeClientePeriodo(base, delta) {

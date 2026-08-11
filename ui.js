@@ -4,6 +4,7 @@
 
 const state = {
   nav: null, clientePeriodo: null, sucursalPeriodo: null,
+  shardMap: null, loadedShards: null, rawUploads: null,
   step: 'welcome', // welcome | region | pais | cliente | cuenta | sucursal
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
@@ -108,10 +109,13 @@ function renderAccessGate(error) {
 async function loadData() {
   renderLoading();
   try {
-    const { nav, clientePeriodo, sucursalPeriodo } = await loadAllData();
+    const { nav, clientePeriodo, sucursalPeriodo, shardMap, rawUploads, loadedShards } = await loadAllData();
     state.nav = nav;
     state.clientePeriodo = clientePeriodo;
     state.sucursalPeriodo = sucursalPeriodo;
+    state.shardMap = shardMap;
+    state.rawUploads = rawUploads;
+    state.loadedShards = loadedShards;
     state.loading = false;
     state.step = 'greeting';
     renderGreetingCard();
@@ -173,19 +177,44 @@ function pushHistory() {
   state.navStack.push(snapshotNav());
   state.navPos = state.navStack.length - 1;
 }
+
+/** Determina qué clientes hacen falta para la pantalla actual y trae sus shards si no están */
+async function ensureShardsForContext() {
+  if (state.step === 'cliente' && state.nav && state.region && state.pais) {
+    const clientes = Object.keys(state.nav[state.region][state.pais] || {});
+    await ensureShardsLoaded(state, clientes);
+  } else if ((state.step === 'cuenta' || state.step === 'sucursal') && state.cliente) {
+    await ensureShardsLoaded(state, [state.cliente]);
+  }
+}
+
+/** Igual que render(), pero primero se asegura de tener los datos de sucursales que hagan falta */
+async function renderWithData() {
+  const needsShards = (state.step === 'cliente' || state.step === 'cuenta' || state.step === 'sucursal');
+  if (needsShards) {
+    renderLoading();
+    try {
+      await ensureShardsForContext();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  render();
+}
+
 function goStepBack() {
   if (state.navPos <= 0) return;
   state.navPos--;
   Object.assign(state, state.navStack[state.navPos]);
   state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null;
-  render();
+  renderWithData();
 }
 function goStepForward() {
   if (state.navPos >= state.navStack.length - 1) return;
   state.navPos++;
   Object.assign(state, state.navStack[state.navPos]);
   state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null;
-  render();
+  renderWithData();
 }
 
 let lastRenderedStep = null;
@@ -791,7 +820,7 @@ function renderUploadModal() {
 // ---------- Handlers ----------
 function attachHandlers() {
   document.querySelectorAll('[data-pick]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', async () => {
       const kind = el.getAttribute('data-pick');
       const value = el.getAttribute('data-value');
       if (kind === 'region') { state.region = value; state.step = 'pais'; }
@@ -799,11 +828,11 @@ function attachHandlers() {
       else if (kind === 'cliente') { state.cliente = value; state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null; state.step = 'cuenta'; }
       else if (kind === 'sucursal') { state.sucursal = value; state.periodo = null; state.filterUn = null; state.filterCat = null; state.filterGen = null; state.step = 'sucursal'; }
       pushHistory();
-      render();
+      await renderWithData();
     });
   });
   document.querySelectorAll('[data-nav]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', async () => {
       const target = el.getAttribute('data-nav');
       state.step = target;
       state.periodo = null;
@@ -812,7 +841,7 @@ function attachHandlers() {
       if (target === 'pais') { state.cliente = state.sucursal = null; }
       if (target === 'cuenta') { state.sucursal = null; }
       pushHistory();
-      render();
+      await renderWithData();
     });
   });
   const prevBtn = document.getElementById('periodPrev');
@@ -821,13 +850,13 @@ function attachHandlers() {
   if (nextBtn) nextBtn.addEventListener('click', () => shiftPeriod(1));
 
   const anotherStoreBtn = document.getElementById('anotherStoreBtn');
-  if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', () => {
+  if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', async () => {
     state.sucursal = null;
     state.periodo = null;
     state.filterUn = null; state.filterCat = null; state.filterGen = null;
     state.step = 'cuenta';
     pushHistory();
-    render();
+    await renderWithData();
   });
 
   const navBackBtn = document.getElementById('navBackBtn');
@@ -928,6 +957,7 @@ async function handleFileUpload(e) {
       mergeClientePeriodo(state.clientePeriodo, payload.cliente_periodo);
       mergeSucursalPeriodo(state.sucursalPeriodo, payload.sucursal_periodo);
       mergeNav(state.nav, payload.nav);
+      state.rawUploads.push(payload); // para que se re-aplique si luego se carga un shard nuevo
     }
 
     // Guardado en Firebase en paralelo, para que un archivo con muchos meses no se sienta lento
