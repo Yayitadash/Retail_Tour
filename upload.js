@@ -151,64 +151,32 @@ async function parseUploadedFile(file) {
 }
 
 /**
- * Un archivo subido puede traer más de un mes. Firestore guarda un
- * documento por periodo, así que partimos el resultado de parseUploadedFile
- * en un payload independiente por cada periodo detectado.
+ * Reparte lo que se subió en un payload independiente POR CADA CLIENTE
+ * (con todos los meses que traiga ese cliente en el archivo, no solo uno).
+ * Así cada documento de Firestore es chiquito y se puede cargar de a un
+ * cliente a la vez, en vez de traer todos los meses de todas las cuentas
+ * de golpe cada vez que alguien abre la app.
  */
-function splitByPeriodo(parsed) {
+function splitByCliente(parsed) {
   const payloads = [];
-  const MAX_CHUNK_BYTES = 700 * 1024; // margen cómodo bajo el límite de 1MB de Firestore
+  for (const cliente in parsed.sucursal_periodo) {
+    const sucursal_periodo = { [cliente]: parsed.sucursal_periodo[cliente] };
 
-  for (const periodo of parsed.periodos) {
     const cliente_periodo = {};
-    for (const cliente in parsed.cliente_periodo) {
-      const rows = parsed.cliente_periodo[cliente].hist.filter(r => r.p === periodo);
-      if (rows.length) {
-        cliente_periodo[cliente] = {
-          region: parsed.cliente_periodo[cliente].region,
-          pais: parsed.cliente_periodo[cliente].pais,
-          hist: rows
-        };
-      }
-    }
-    const sucursal_periodo = {};
-    for (const cliente in parsed.sucursal_periodo) {
-      for (const sucursal in parsed.sucursal_periodo[cliente]) {
-        const store = parsed.sucursal_periodo[cliente][sucursal];
-        const periods = store.periods.filter(r => r.p === periodo);
-        if (!periods.length) continue;
-        const cube = {};
-        if (store.cube[periodo]) cube[periodo] = store.cube[periodo];
-        sucursal_periodo[cliente] = sucursal_periodo[cliente] || {};
-        sucursal_periodo[cliente][sucursal] = { periods, cube };
+    if (parsed.cliente_periodo[cliente]) cliente_periodo[cliente] = parsed.cliente_periodo[cliente];
+
+    const nav = {};
+    for (const region in parsed.nav) {
+      for (const pais in parsed.nav[region]) {
+        if (parsed.nav[region][pais][cliente]) {
+          nav[region] = nav[region] || {};
+          nav[region][pais] = nav[region][pais] || {};
+          nav[region][pais][cliente] = parsed.nav[region][pais][cliente];
+        }
       }
     }
 
-    // Un mes completo (todas las cuentas) puede pasar el límite de 1MB por
-    // documento de Firestore, así que se reparte en varios "chunks" por
-    // cliente. cliente_periodo y nav son chiquitos, van completos en cada uno.
-    const clientesDelMes = Object.keys(sucursal_periodo);
-    let chunkIdx = 0;
-    let current = {};
-    let currentBytes = 0;
-    const flush = () => {
-      if (Object.keys(current).length) {
-        payloads.push({ periodo, chunk: chunkIdx++, cliente_periodo, sucursal_periodo: current, nav: parsed.nav });
-        current = {};
-        currentBytes = 0;
-      }
-    };
-    for (const cliente of clientesDelMes) {
-      const clienteBytes = JSON.stringify(sucursal_periodo[cliente]).length;
-      if (currentBytes + clienteBytes > MAX_CHUNK_BYTES && Object.keys(current).length) flush();
-      current[cliente] = sucursal_periodo[cliente];
-      currentBytes += clienteBytes;
-    }
-    flush();
-    if (!clientesDelMes.length) {
-      // mes sin sucursales (raro, pero por si acaso no perder cliente_periodo/nav)
-      payloads.push({ periodo, chunk: 0, cliente_periodo, sucursal_periodo: {}, nav: parsed.nav });
-    }
+    payloads.push({ cliente, cliente_periodo, sucursal_periodo, nav });
   }
   return payloads;
 }

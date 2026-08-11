@@ -4,7 +4,7 @@
 
 const state = {
   nav: null, clientePeriodo: null, sucursalPeriodo: null,
-  shardMap: null, loadedShards: null, rawUploads: null,
+  shardMap: null, loadedShards: null, loadedClientUploads: null,
   step: 'welcome', // welcome | region | pais | cliente | cuenta | sucursal
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
@@ -109,13 +109,13 @@ function renderAccessGate(error) {
 async function loadData() {
   renderLoading();
   try {
-    const { nav, clientePeriodo, sucursalPeriodo, shardMap, rawUploads, loadedShards } = await loadAllData();
+    const { nav, clientePeriodo, sucursalPeriodo, shardMap, loadedShards, loadedClientUploads } = await loadAllData();
     state.nav = nav;
     state.clientePeriodo = clientePeriodo;
     state.sucursalPeriodo = sucursalPeriodo;
     state.shardMap = shardMap;
-    state.rawUploads = rawUploads;
     state.loadedShards = loadedShards;
+    state.loadedClientUploads = loadedClientUploads;
     state.loading = false;
     state.step = 'greeting';
     renderGreetingCard();
@@ -178,13 +178,13 @@ function pushHistory() {
   state.navPos = state.navStack.length - 1;
 }
 
-/** Determina qué clientes hacen falta para la pantalla actual y trae sus shards si no están */
+/** Determina qué clientes hacen falta para la pantalla actual y trae sus datos si no están */
 async function ensureShardsForContext() {
   if (state.step === 'cliente' && state.nav && state.region && state.pais) {
     const clientes = Object.keys(state.nav[state.region][state.pais] || {});
-    await ensureShardsLoaded(state, clientes);
+    await ensureClienteDataLoaded(state, clientes);
   } else if ((state.step === 'cuenta' || state.step === 'sucursal') && state.cliente) {
-    await ensureShardsLoaded(state, [state.cliente]);
+    await ensureClienteDataLoaded(state, [state.cliente]);
   }
 }
 
@@ -950,21 +950,20 @@ async function handleFileUpload(e) {
     const parsed = await parseUploadedFile(file);
     if (!parsed.periodos.length) throw new Error('No periods found.');
     const labels = parsed.periodos.map(p => periodoLabelI18n(p, state.lang)).join(', ');
-    const payloads = splitByPeriodo(parsed);
+    const payloads = splitByCliente(parsed);
 
     // Aplicamos los cambios en memoria de una vez (la app se ve actualizada al instante)
     for (const payload of payloads) {
       mergeClientePeriodo(state.clientePeriodo, payload.cliente_periodo);
       mergeSucursalPeriodo(state.sucursalPeriodo, payload.sucursal_periodo);
       mergeNav(state.nav, payload.nav);
-      state.rawUploads.push(payload); // para que se re-aplique si luego se carga un shard nuevo
     }
 
-    // Guardado en Firebase en paralelo, para que un archivo con muchos meses no se sienta lento
+    // Guardado en Firebase en paralelo, un documento chico por cliente
     let done = 0;
     statusEl.textContent = L('savingProgress', done, payloads.length);
     await Promise.all(payloads.map(payload =>
-      saveMonthlyUpload(payload).then(() => {
+      saveClientUpload(payload).then(() => {
         done++;
         statusEl.textContent = L('savingProgress', done, payloads.length);
       })

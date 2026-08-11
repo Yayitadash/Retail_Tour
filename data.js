@@ -4,11 +4,14 @@
 // que se hayan subido a Firestore, para que la vista sea la misma
 // sin importar desde qué dispositivo se abra la app.
 //
-// IMPORTANTE: los datos de sucursales (~77MB en total) NO se cargan
-// todos de una vez — eso hacía que Safari en iPhone se quedara sin
-// memoria y cerrara la página ("A problem repeatedly occurred").
-// En vez de eso, se cargan "por partes" (shards) solo cuando el
-// vendedor realmente navega a las cuentas de esa parte.
+// IMPORTANTE sobre memoria: nada de esto se carga todo de una vez.
+// - Los archivos estáticos grandes (~77MB en total) se traen "por
+//   partes" (shards), solo cuando el vendedor navega a esa parte.
+// - Los meses subidos por el botón ⇪ se guardan en Firestore UN
+//   DOCUMENTO POR CLIENTE (no uno por mes con todas las cuentas), y
+//   también se traen solo del cliente que se está viendo. Así, por
+//   más meses que se acumulen (agosto, septiembre...), nunca se
+//   descarga todo de golpe — ni al abrir la app, ni al navegar.
 // ============================================================
 
 const firebaseConfig = {
@@ -24,10 +27,10 @@ let fbApp = null, fbDb = null;
 
 async function initFirebase() {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-  const { getFirestore, collection, getDocs, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  const { getFirestore, collection, getDocs, doc, getDoc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
   fbApp = initializeApp(firebaseConfig);
   fbDb = getFirestore(fbApp);
-  window.__fb = { getFirestore, collection, getDocs, doc, setDoc, db: fbDb };
+  window.__fb = { getFirestore, collection, getDocs, doc, getDoc, setDoc, db: fbDb };
   return window.__fb;
 }
 
@@ -37,12 +40,17 @@ async function fetchJSON(path) {
   return res.json();
 }
 
+function clientDocId(cliente) {
+  return cliente.replace(/\//g, '_').slice(0, 300);
+}
+
 /**
  * Carga solo lo liviano al iniciar: nav.json, cliente_periodo.json, el
- * mapa de qué cliente vive en qué archivo (shard_map.json), y los meses
- * subidos por Firestore (se guardan en crudo para poder re-aplicarlos
- * cada vez que se cargue un shard nuevo). NO carga los archivos grandes
- * de sucursales todavía — eso pasa bajo demanda con ensureShardsLoaded().
+ * mapa de qué cliente vive en qué archivo (shard_map.json), y un pequeño
+ * "aviso" de si alguna cuenta nueva (que no existía en la base original)
+ * fue agregada por el botón ⇪, para que aparezca en la navegación.
+ * NO carga los archivos grandes de sucursales ni los meses de Firestore
+ * de cada cliente todavía — eso pasa bajo demanda con ensureClienteDataLoaded().
  */
 async function loadAllData() {
   const [nav, clientePeriodo, shardMap] = await Promise.all([
@@ -51,53 +59,63 @@ async function loadAllData() {
     fetchJSON('./data/shard_map.json')
   ]);
 
-  let rawUploads = [];
   try {
     const fb = await initFirebase();
-    const snap = await fb.getDocs(fb.collection(fb.db, 'monthly_uploads'));
-    snap.forEach(d => rawUploads.push(d.data()));
+    const navSnap = await fb.getDoc(fb.doc(fb.db, 'monthly_uploads_meta', 'nav_updates'));
+    if (navSnap.exists()) mergeNav(nav, navSnap.data().nav || {});
   } catch (err) {
-    console.warn('No se pudo conectar a Firestore, se usará solo el histórico base:', err);
-  }
-  rawUploads.sort((a, b) => a.periodo - b.periodo);
-
-  // cliente_periodo y nav son livianos: los meses subidos se aplican de una vez
-  for (const up of rawUploads) {
-    mergeClientePeriodo(clientePeriodo, up.cliente_periodo || {});
-    mergeNav(nav, up.nav || {});
+    console.warn('No se pudo traer el aviso de cuentas nuevas (nav_updates):', err);
   }
 
   return {
-    nav, clientePeriodo, shardMap, rawUploads,
-    sucursalPeriodo: {},       // se va llenando con ensureShardsLoaded()
-    loadedShards: new Set()
+    nav, clientePeriodo, shardMap,
+    sucursalPeriodo: {},          // se va llenando con ensureClienteDataLoaded()
+    loadedShards: new Set(),
+    loadedClientUploads: new Set() // clientes cuyos meses de Firestore ya se trajeron
   };
 }
 
 /**
- * Se asegura de que los archivos de sucursales de estos clientes ya estén
- * cargados en memoria (state.sucursalPeriodo). Si algún shard todavía no
- * se ha pedido, lo trae y lo fusiona — y de paso vuelve a aplicar los
- * meses de Firestore por si tenían datos de esos clientes.
+ * Se asegura de que estos clientes ya tengan sus datos de sucursales en
+ * memoria (state.sucursalPeriodo): trae el archivo estático (shard) que
+ * les corresponda si hace falta, y también revisa Firestore por si ese
+ * cliente tiene meses subidos por el botón ⇪ — todo por cliente, nunca
+ * "todo de todos" de una vez.
  */
-async function ensureShardsLoaded(state, clienteNames) {
-  const needed = new Set();
+async function ensureClienteDataLoaded(state, clienteNames) {
+  const shardsNeeded = new Set();
   for (const cliente of clienteNames) {
     const shard = state.shardMap[cliente];
-    if (shard && !state.loadedShards.has(shard)) needed.add(shard);
+    if (shard && !state.loadedShards.has(shard)) shardsNeeded.add(shard);
   }
-  if (!needed.size) return;
-
-  const shardsArr = Array.from(needed);
-  const parts = await Promise.all(shardsArr.map(s => fetchJSON(`./data/sucursal_periodo_${s}.json`)));
-  for (let i = 0; i < shardsArr.length; i++) {
-    mergeSucursalPeriodo(state.sucursalPeriodo, parts[i]);
-    state.loadedShards.add(shardsArr[i]);
+  if (shardsNeeded.size) {
+    const shardsArr = Array.from(shardsNeeded);
+    const parts = await Promise.all(shardsArr.map(s => fetchJSON(`./data/sucursal_periodo_${s}.json`)));
+    for (let i = 0; i < shardsArr.length; i++) {
+      mergeSucursalPeriodo(state.sucursalPeriodo, parts[i]);
+      state.loadedShards.add(shardsArr[i]);
+    }
   }
 
-  // Re-aplicar los meses de Firestore para que cubran también lo recién cargado
-  for (const up of state.rawUploads) {
-    mergeSucursalPeriodo(state.sucursalPeriodo, up.sucursal_periodo || {});
+  const clientesFirestore = clienteNames.filter(c => !state.loadedClientUploads.has(c));
+  if (clientesFirestore.length) {
+    let fb;
+    try { fb = window.__fb || await initFirebase(); } catch (err) { console.warn('Firestore no disponible:', err); fb = null; }
+    if (fb) {
+      await Promise.all(clientesFirestore.map(async cliente => {
+        try {
+          const snap = await fb.getDoc(fb.doc(fb.db, 'monthly_uploads_by_client', clientDocId(cliente)));
+          if (snap.exists()) {
+            const data = snap.data();
+            mergeClientePeriodo(state.clientePeriodo, data.cliente_periodo || {});
+            mergeSucursalPeriodo(state.sucursalPeriodo, data.sucursal_periodo || {});
+          }
+        } catch (err) {
+          console.warn('No se pudo traer Firestore para', cliente, err);
+        }
+        state.loadedClientUploads.add(cliente);
+      }));
+    }
   }
 }
 
@@ -157,14 +175,23 @@ function mergeNav(base, delta) {
 }
 
 /**
- * Guarda un "pedazo" (chunk) de un mes en Firestore. Un mes completo con
- * todas las cuentas puede pasar el límite de 1MB por documento, así que
- * cada payload trae `chunk` (0, 1, 2...) y se guarda como documento aparte
- * (ej. "202607_0", "202607_1"). `payload` tiene la forma
- * { periodo, chunk, cliente_periodo, sucursal_periodo, nav }.
+ * Guarda los meses de UN cliente en Firestore, en un solo documento chico
+ * (no todos los clientes juntos como antes). `payload` tiene la forma
+ * { cliente, cliente_periodo, sucursal_periodo, nav }. Además actualiza un
+ * pequeño "aviso" de navegación por si esa cuenta o sucursal es nueva, para
+ * que aparezca de inmediato en la lista sin tener que cargar todo Firestore.
  */
-async function saveMonthlyUpload(payload) {
+async function saveClientUpload(payload) {
   const fb = window.__fb || await initFirebase();
-  const docId = `${payload.periodo}_${payload.chunk ?? 0}`;
-  await fb.setDoc(fb.doc(fb.db, 'monthly_uploads', docId), payload);
+  const docId = clientDocId(payload.cliente);
+  await fb.setDoc(fb.doc(fb.db, 'monthly_uploads_by_client', docId), payload);
+
+  const navRef = fb.doc(fb.db, 'monthly_uploads_meta', 'nav_updates');
+  let existingNav = {};
+  try {
+    const snap = await fb.getDoc(navRef);
+    if (snap.exists()) existingNav = snap.data().nav || {};
+  } catch (err) { /* si no existe todavía, se crea */ }
+  mergeNav(existingNav, payload.nav || {});
+  await fb.setDoc(navRef, { nav: existingNav });
 }
