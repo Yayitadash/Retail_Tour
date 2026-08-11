@@ -157,6 +157,8 @@ async function parseUploadedFile(file) {
  */
 function splitByPeriodo(parsed) {
   const payloads = [];
+  const MAX_CHUNK_BYTES = 700 * 1024; // margen cómodo bajo el límite de 1MB de Firestore
+
   for (const periodo of parsed.periodos) {
     const cliente_periodo = {};
     for (const cliente in parsed.cliente_periodo) {
@@ -181,7 +183,32 @@ function splitByPeriodo(parsed) {
         sucursal_periodo[cliente][sucursal] = { periods, cube };
       }
     }
-    payloads.push({ periodo, cliente_periodo, sucursal_periodo, nav: parsed.nav });
+
+    // Un mes completo (todas las cuentas) puede pasar el límite de 1MB por
+    // documento de Firestore, así que se reparte en varios "chunks" por
+    // cliente. cliente_periodo y nav son chiquitos, van completos en cada uno.
+    const clientesDelMes = Object.keys(sucursal_periodo);
+    let chunkIdx = 0;
+    let current = {};
+    let currentBytes = 0;
+    const flush = () => {
+      if (Object.keys(current).length) {
+        payloads.push({ periodo, chunk: chunkIdx++, cliente_periodo, sucursal_periodo: current, nav: parsed.nav });
+        current = {};
+        currentBytes = 0;
+      }
+    };
+    for (const cliente of clientesDelMes) {
+      const clienteBytes = JSON.stringify(sucursal_periodo[cliente]).length;
+      if (currentBytes + clienteBytes > MAX_CHUNK_BYTES && Object.keys(current).length) flush();
+      current[cliente] = sucursal_periodo[cliente];
+      currentBytes += clienteBytes;
+    }
+    flush();
+    if (!clientesDelMes.length) {
+      // mes sin sucursales (raro, pero por si acaso no perder cliente_periodo/nav)
+      payloads.push({ periodo, chunk: 0, cliente_periodo, sucursal_periodo: {}, nav: parsed.nav });
+    }
   }
   return payloads;
 }

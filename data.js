@@ -126,11 +126,14 @@ function mergeNav(base, delta) {
 }
 
 /**
- * Guarda un mes nuevo en Firestore. `payload` debe tener la forma
- * { periodo, cliente_periodo, sucursal_periodo, nav }.
+ * Guarda un "pedazo" (chunk) de un mes en Firestore. Un mes completo con
+ * todas las cuentas puede pasar el límite de 1MB por documento, así que
+ * cada payload trae `chunk` (0, 1, 2...) y se guarda como documento aparte
+ * (ej. "202607_0", "202607_1"). `payload` tiene la forma
+ * { periodo, chunk, cliente_periodo, sucursal_periodo, nav }.
  */
 async function saveMonthlyUpload(payload) {
   const fb = window.__fb || await initFirebase();
-  const docId = String(payload.periodo);
+  const docId = `${payload.periodo}_${payload.chunk ?? 0}`;
   await fb.setDoc(fb.doc(fb.db, 'monthly_uploads', docId), payload);
 }
