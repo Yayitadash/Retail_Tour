@@ -62,13 +62,13 @@ function yayaBubble(text, extraClass) {
 }
 
 // ---------- Boot ----------
+// Para cambiar la clave: edita APP_ACCESS_CODE Y sube en 1 el número de
+// APP_ACCESS_VERSION. Eso hace que TODOS los dispositivos (incluso los que
+// ya tenían acceso) tengan que volver a escribir la clave nueva.
 const APP_ACCESS_CODE = '1234';
+const APP_ACCESS_VERSION = 1;
 
 async function boot() {
-  // A quien ya tenía la app instalada (ya tiene nombre guardado) no se le
-  // pide la clave — solo aplica para instalaciones nuevas de aquí en adelante.
-  if (!hasAccess() && state.user) saveAccess();
-
   if (!hasAccess()) {
     renderAccessGate();
     return;

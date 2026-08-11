@@ -23,9 +23,9 @@ function saveLang(lang) {
   localStorage.setItem('rt_lang', lang);
 }
 function hasAccess() {
-  return localStorage.getItem('rt_access') === 'granted';
+  return localStorage.getItem('rt_access_version') === String(APP_ACCESS_VERSION);
 }
 function saveAccess() {
-  localStorage.setItem('rt_access', 'granted');
+  localStorage.setItem('rt_access_version', String(APP_ACCESS_VERSION));
 }
 
