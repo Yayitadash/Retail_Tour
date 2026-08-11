@@ -139,45 +139,46 @@ function avgOverTrailingWindow(series, periodo, months = 12) {
 
 // ============================================================
 // Cubo de detalle: cada sucursal trae, por periodo, una lista de filas
-// [UN, CAT, GEN, FAMILIA, u, v, e] con la granularidad más fina. A partir
-// de esto se puede filtrar y combinar por cualquier subconjunto de
-// UN/CAT/GEN (a diferencia de un solo filtro a la vez).
+// {un,cat,gen,fam,u,v,e} con la granularidad más fina. A partir de esto
+// se puede filtrar y combinar por cualquier subconjunto de UN/CAT/GEN
+// (a diferencia de un solo filtro a la vez).
+// Nota: se usan objetos y no arreglos posicionales porque Firestore no
+// admite "arreglos dentro de arreglos" al guardar los meses subidos.
 // ============================================================
 
 /** Filtra las filas del cubo de un periodo según los filtros activos (los que sean null se ignoran) */
 function cubeFilterRows(rows, filters) {
   if (!rows) return [];
   return rows.filter(r =>
-    (!filters.un || r[0] === filters.un) &&
-    (!filters.cat || r[1] === filters.cat) &&
-    (!filters.gen || r[2] === filters.gen)
+    (!filters.un || r.un === filters.un) &&
+    (!filters.cat || r.cat === filters.cat) &&
+    (!filters.gen || r.gen === filters.gen)
   );
 }
 
 /** Suma unidades/valor/existencia de un conjunto de filas del cubo */
 function cubeTotals(rows) {
-  return rows.reduce((acc, r) => { acc.u += r[4]; acc.v += r[5]; acc.e += r[6]; return acc; }, { u: 0, v: 0, e: 0 });
+  return rows.reduce((acc, r) => { acc.u += r.u; acc.v += r.v; acc.e += r.e; return acc; }, { u: 0, v: 0, e: 0 });
 }
 
 /** Top-N familias dentro de un conjunto de filas del cubo (ya filtradas) */
 function cubeTopFamilias(rows, n = 3) {
   const map = {};
   for (const r of rows) {
-    const fam = r[3];
+    const fam = r.fam;
     if (!map[fam]) map[fam] = { fam, u: 0, v: 0, e: 0 };
-    map[fam].u += r[4]; map[fam].v += r[5]; map[fam].e += r[6];
+    map[fam].u += r.u; map[fam].v += r.v; map[fam].e += r.e;
   }
   return Object.values(map).sort((a, b) => b.u - a.u).slice(0, n);
 }
 
-/** Breakdown por UN o por CAT (sumando sobre las demás dimensiones), para barras */
+/** Breakdown por UN, CAT o GEN (sumando sobre las demás dimensiones), para barras */
 function cubeBreakdown(rows, dim) {
-  const idx = dim === 'un' ? 0 : dim === 'cat' ? 1 : 2;
   const map = {};
   for (const r of rows) {
-    const key = r[idx];
+    const key = r[dim];
     if (!map[key]) map[key] = { key, u: 0, v: 0 };
-    map[key].u += r[4]; map[key].v += r[5];
+    map[key].u += r.u; map[key].v += r.v;
   }
   return Object.values(map).sort((a, b) => b.u - a.u);
 }

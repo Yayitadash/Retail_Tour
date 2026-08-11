@@ -37,10 +37,10 @@ async function fetchJSON(path) {
  * los documentos de Firestore (monthly_uploads), y devuelve todo
  * fusionado en memoria.
  */
-// CEN se divide en 3 partes (Guatemala, Costa Rica, resto) para que ningún
-// archivo se acerque al límite de subida de GitHub. Las demás regiones,
-// más chicas, se quedan en un solo archivo cada una.
-const SUCURSAL_SHARDS = ['CEN_GT', 'CEN_CR', 'CEN_OTROS', 'CAR', 'COL', 'VEN'];
+// La data se divide en varios archivos chicos (ninguno pasa de ~10MB) para
+// no acercarse al límite de subida de GitHub. Si agregas cuentas nuevas y
+// algún archivo empieza a pesar mucho, avísame para volver a repartir.
+const SUCURSAL_SHARDS = ['CEN_1', 'CEN_2', 'CEN_3', 'CEN_4', 'COL_1', 'COL_2', 'CAR', 'VEN_1', 'VEN_2'];
 
 async function loadAllData() {
   const [nav, clientePeriodo, ...sucursalParts] = await Promise.all([

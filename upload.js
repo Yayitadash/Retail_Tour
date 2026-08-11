@@ -133,7 +133,10 @@ async function parseUploadedFile(file) {
         const cubeNode = cube[cliente]?.[sucursal]?.[periodo] || {};
         cubeOut[periodo] = Object.values(cubeNode)
           .filter(row => row.u !== 0 || row.e !== 0)
-          .map(row => [row.un, row.cat, row.gen, row.familia, row.u, Math.round(row.v * 100) / 100, Math.round(row.e * 100) / 100]);
+          .map(row => ({
+            un: row.un, cat: row.cat, gen: row.gen, fam: row.familia,
+            u: row.u, v: Math.round(row.v * 100) / 100, e: Math.round(row.e * 100) / 100
+          }));
       }
       sucursalPeriodoOut[cliente][sucursal] = { periods: periodsArr, cube: cubeOut };
     }

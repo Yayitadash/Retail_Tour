@@ -634,10 +634,10 @@ function renderExploreSection(cubeRows, sucStore, periodo) {
   const unLabels = t(state.lang, 'unLabels');
   const genLabels = t(state.lang, 'genLabels');
 
-  const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r[0] === u));
+  const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r.un === u));
   const catOptions = cubeBreakdown(cubeRows, 'cat').slice(0, 4).map(x => x.key);
   const genOrder = ['MEN', 'WOMEN', 'KIDS'];
-  const genOptions = genOrder.filter(g => cubeRows.some(r => r[2] === g));
+  const genOptions = genOrder.filter(g => cubeRows.some(r => r.gen === g));
 
   const filters = { un: state.filterUn, cat: state.filterCat, gen: state.filterGen };
   const anyFilter = filters.un || filters.cat || filters.gen;
