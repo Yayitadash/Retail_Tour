@@ -366,6 +366,10 @@ function renderClienteStep() {
   });
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
+  const countsByClasif = {};
+  for (const x of clientesConClasif) {
+    if (x.clasif) countsByClasif[x.clasif] = (countsByClasif[x.clasif] || 0) + 1;
+  }
   const keysToShow = state.clasifFilter ? [state.clasifFilter] : CLASIF_ORDER.filter(k => presentClasifs.has(k));
   const filterButtons = keysToShow.map(k => `
     <button class="clasif-long-btn ${state.clasifFilter === k ? 'active' : ''}" style="--c:${CLASIFICACIONES[k].color}" data-filter-clasif="${k}">
@@ -374,6 +378,7 @@ function renderClienteStep() {
         <span class="clasif-long-name">${classifLabel(k, state.lang)}</span>
         <span class="clasif-long-desc">${classifDesc(k, state.lang)}</span>
       </span>
+      <span class="clasif-long-count">${countsByClasif[k] || 0}</span>
     </button>`).join('');
 
   const visibles = state.clasifFilter
