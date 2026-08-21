@@ -27,6 +27,14 @@ function fmtMoney(v) {
   if (v === null || v === undefined) return '—';
   return '$' + Math.round(v).toLocaleString('es-US');
 }
+function fmtMoneyShort(v) {
+  if (v === null || v === undefined) return '—';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1000000) return sign + '$' + (abs / 1000000).toFixed(abs % 1000000 === 0 ? 0 : 1) + 'M';
+  if (abs >= 1000) return sign + '$' + Math.round(abs / 1000) + 'K';
+  return sign + '$' + Math.round(abs);
+}
 function fmtUnits(v) {
   if (v === null || v === undefined) return '—';
   return Math.round(v).toLocaleString('es-US');
@@ -42,7 +50,7 @@ function fmtWoh(v) {
 }
 function gClass(v) {
   if (v === null || v === undefined) return '';
-  return v >= -0.02 ? 'stat-pos' : 'stat-neg';
+  return v >= 0 ? 'stat-pos' : 'stat-neg';
 }
 function titleCase(s) {
   if (!s) return s;
@@ -431,7 +439,9 @@ function renderCuentaStep() {
   const sucursalesConVenta = sucursalesRaw.map(s => {
     const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s] && state.sucursalPeriodo[state.cliente][s].periods) || [];
     const sucRow = sucSeries.find(r => r.p === periodo);
-    return { s, v: sucRow ? sucRow.v : -1, sucRow };
+    const pyRow = sucSeries.find(r => r.p === periodo - 100);
+    const growthValor = (sucRow && pyRow && pyRow.v) ? (sucRow.v - pyRow.v) / Math.abs(pyRow.v) : null;
+    return { s, v: sucRow ? sucRow.v : -1, sucRow, growthValor };
   }).sort((a, b) => b.v - a.v);
 
   return `
@@ -451,12 +461,15 @@ function renderCuentaStep() {
     ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
-      ${sucursalesConVenta.map(({ s, sucRow }) => {
+      ${sucursalesConVenta.map(({ s, sucRow, growthValor }) => {
         return `
         <button class="pick-row" data-pick="sucursal" data-value="${escapeAttr(s)}">
           <span class="pick-row-title">${titleCase(s)}</span>
           <span class="pick-row-right">
-            ${sucRow ? `<span class="pick-row-sales">${fmtMoney(sucRow.v)}</span>` : `<span class="pick-row-sales pick-row-sales-empty">${L('noMovementShort')}</span>`}
+            ${sucRow ? `
+              <span class="pick-row-sales">${fmtMoneyShort(sucRow.v)}</span>
+              <span class="pick-row-growth ${gClass(growthValor)}">${fmtPct(growthValor)}</span>
+            ` : `<span class="pick-row-sales pick-row-sales-empty">${L('noMovementShort')}</span>`}
             <span class="chevron">›</span>
           </span>
         </button>`;
