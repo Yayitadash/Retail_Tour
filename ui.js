@@ -490,6 +490,112 @@ function accountFilterScopeLabel() {
   return parts.join(' de ');
 }
 
+const DIM_NOUN = {
+  es: { un: 'unidad', cat: 'categoría', fam: 'producto' },
+  en: { un: 'business unit', cat: 'category', fam: 'product' }
+};
+
+/**
+ * Analiza las distintas dimensiones de la cuenta (UN, categoría, familia)
+ * y elige UN solo hallazgo — el más relevante comercialmente según las
+ * reglas propias de cada clasificación — para el mensaje de Yaya.
+ * Devuelve null si no hay nada suficientemente relevante que señalar.
+ */
+function findAccountInsight(cliente, periodo, clasif) {
+  const HEALTHY_LOW = 20, HEALTHY_HIGH = 26;
+  const rows = getClientCubeRows(cliente, periodo);
+  if (!rows.length) return null;
+  const totalV = cubeTotals(rows).v || 1;
+
+  const buildCandidate = (type, key, label, filterObj) => {
+    const filtered = cubeFilterRows(rows, filterObj);
+    const tot = cubeTotals(filtered);
+    if (!tot.v) return null;
+    const avg = clientCubeAvgTrailing(cliente, filterObj, periodo, 12).avg;
+    const woh = (avg && avg !== 0) ? (tot.e / avg * 4.33) : null;
+    if (woh === null) return null;
+    return { type, key, label, share: tot.v / totalV, woh, v: tot.v, u: tot.u };
+  };
+
+  const unLabels = t(state.lang, 'unLabels');
+  const unCandidates = UN_ORDER.filter(u => rows.some(r => r.un === u))
+    .map(u => buildCandidate('un', u, unLabels[u] || u, { un: u })).filter(Boolean);
+
+  const catTop = cubeBreakdown(rows, 'cat').slice(0, 6);
+  const catCandidates = catTop
+    .map(c => buildCandidate('cat', c.key, catLabel(c.key), { cat: c.key })).filter(Boolean);
+
+  const famTop = cubeTopFamilias(rows, 8);
+  const famCandidates = famTop.map(f => {
+    const woh = (f.e && f.u) ? (f.e / f.u * 4.33) : null;
+    if (woh === null) return null;
+    return { type: 'fam', key: f.fam, label: titleCase(f.fam), share: f.v / totalV, woh, v: f.v, u: f.u };
+  }).filter(Boolean);
+
+  const majorPool = unCandidates.concat(catCandidates);
+
+  function bestByScore(pool, scoreFn, minShare) {
+    const filtered = pool.filter(c => (!minShare || c.share >= minShare) && scoreFn(c) > 0);
+    if (!filtered.length) return null;
+    return filtered.reduce((a, b) => scoreFn(a) >= scoreFn(b) ? a : b);
+  }
+
+  if (clasif === 'Riesgo Crítico' || clasif === 'Las Robustas') {
+    const scoreFn = c => c.share * (c.woh - HEALTHY_HIGH);
+    let best = bestByScore(majorPool, scoreFn, 0.15);
+    if (!best) best = bestByScore(famCandidates, scoreFn, 0);
+    if (!best) return null;
+    const key = clasif === 'Riesgo Crítico' ? 'insightRiesgoCritico' : 'insightRobustas';
+    return L(key, best.label, Math.round(best.share * 100), best.woh.toFixed(1));
+  }
+
+  if (clasif === 'Desabastecidas') {
+    const scoreFn = c => c.share * (HEALTHY_LOW - c.woh);
+    let best = bestByScore(majorPool, scoreFn, 0.15);
+    if (!best) best = bestByScore(famCandidates, scoreFn, 0);
+    if (!best) return null;
+    return L('insightDesabastecidas', best.label, DIM_NOUN[state.lang][best.type], Math.round(best.share * 100), best.woh.toFixed(1));
+  }
+
+  if (clasif === 'Zona de Riesgo') {
+    const findImbalance = (candidates, dimType) => {
+      const top4 = candidates.slice().sort((a, b) => b.share - a.share).slice(0, 4);
+      if (top4.length < 2) return null;
+      const leader = top4[0];
+      let bestPair = null, bestSpread = 0;
+      for (let i = 1; i < top4.length; i++) {
+        const other = top4[i];
+        let spread = 0, lowSide = null, highSide = null;
+        if (leader.woh < HEALTHY_LOW && other.woh > HEALTHY_HIGH) { spread = other.woh - leader.woh; lowSide = leader; highSide = other; }
+        else if (leader.woh > HEALTHY_HIGH && other.woh < HEALTHY_LOW) { spread = leader.woh - other.woh; lowSide = other; highSide = leader; }
+        if (spread > bestSpread) { bestSpread = spread; bestPair = { lowSide, highSide }; }
+      }
+      return bestPair ? { ...bestPair, noun: DIM_NOUN[state.lang][dimType] } : null;
+    };
+    const result = findImbalance(catCandidates, 'cat') || findImbalance(unCandidates, 'un');
+    if (!result) return null;
+    return L('insightZonaRiesgo', result.lowSide.label, result.highSide.label, result.noun);
+  }
+
+  if (clasif === 'Las Estrellas') {
+    const candidate = famCandidates.slice().sort((a, b) => b.v - a.v).find(c => c.woh < HEALTHY_LOW);
+    if (candidate) return L('insightEstrellas', candidate.label, candidate.woh.toFixed(1));
+    const catCandidate = catCandidates.slice().sort((a, b) => b.share - a.share).find(c => c.woh < HEALTHY_LOW);
+    if (catCandidate) return L('insightEstrellas', catCandidate.label, catCandidate.woh.toFixed(1));
+    return null;
+  }
+
+  if (clasif === 'Las Aceleradas') {
+    const pool = famCandidates.concat(catCandidates).concat(unCandidates);
+    let candidate = pool.filter(c => c.woh < 15).sort((a, b) => b.v - a.v)[0];
+    if (!candidate) candidate = pool.filter(c => c.woh < 18).sort((a, b) => b.v - a.v)[0];
+    if (!candidate) return null;
+    return L('insightAceleradas', candidate.label, candidate.woh.toFixed(1));
+  }
+
+  return null;
+}
+
 function renderCuentaStep() {
   const cd = state.clientePeriodo[state.cliente];
   if (!cd || !cd.hist.length) return `<div class="empty">${L('noData')}</div>`;
@@ -583,8 +689,7 @@ function renderCuentaStep() {
     ${renderClassificationCard(metrics, streak, form)}
     ${statsCardHtml}
     ${!anyFilter ? renderAvgSalesBubble(metrics) : ''}
-    ${!anyFilter ? renderAccountRecoCard(metrics) : ''}
-    ${trend && !anyFilter ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
+    ${!anyFilter ? renderAccountInsightBubble(state.cliente, periodo, metrics ? metrics.clasif : null) : ''}
     ${renderAccountFilters(state.cliente, periodo)}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
@@ -892,6 +997,13 @@ function renderExploreSection(cubeRows, sucStore, periodo) {
       </div>
       ${resultHtml}
     </div>`;
+}
+
+function renderAccountInsightBubble(cliente, periodo, clasif) {
+  if (!clasif) return '';
+  const msg = findAccountInsight(cliente, periodo, clasif);
+  if (!msg) return '';
+  return yayaBubble(msg);
 }
 
 function renderAccountRecoCard(metrics) {
