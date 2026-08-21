@@ -421,6 +421,75 @@ function renderClienteStep() {
 }
 
 // ---------- Step: Cuenta (resumen general + elegir sucursal) ----------
+function getClientCubeRows(cliente, periodo) {
+  const stores = state.sucursalPeriodo[cliente] || {};
+  let rows = [];
+  for (const s in stores) {
+    const r = stores[s].cube && stores[s].cube[String(periodo)];
+    if (r) rows = rows.concat(r);
+  }
+  return rows;
+}
+
+function clientCubeAvgTrailing(cliente, filters, periodo, months = 12) {
+  const cd = state.clientePeriodo[cliente];
+  const activePeriods = new Set((cd ? cd.hist : []).map(r => r.p));
+  let sum = 0, nMonths = 0;
+  for (let k = 0; k < months; k++) {
+    const p = periodoAddMonths(periodo, -k);
+    if (!activePeriods.has(p)) continue;
+    nMonths++;
+    sum += cubeTotals(cubeFilterRows(getClientCubeRows(cliente, p), filters)).u;
+  }
+  if (nMonths === 0) return { avg: null, nMonths: 0 };
+  return { avg: sum / nMonths, nMonths };
+}
+
+function renderAccountFilters(cliente, periodo) {
+  const cubeRows = getClientCubeRows(cliente, periodo);
+  if (!cubeRows.length) return '';
+  const unLabels = t(state.lang, 'unLabels');
+  const genLabels = t(state.lang, 'genLabels');
+
+  const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r.un === u));
+  const catOptions = cubeBreakdown(cubeRows, 'cat').slice(0, 4).map(x => x.key);
+  const genOrder = ['MEN', 'WOMEN', 'KIDS'];
+  const genOptions = genOrder.filter(g => cubeRows.some(r => r.gen === g));
+
+  return `
+    ${yayaBubble(L('exploreAccountTitle'))}
+    <div class="card explore-card">
+      <div class="explore-group">
+        <span class="detail-section-label">${L('businessUnitsIn')}</span>
+        <div class="chips">
+          ${unOptions.map(u => `<button class="chip chip-filter ${state.filterUn === u ? 'active' : ''}" data-filter-un="${u}">${unLabels[u] || u}</button>`).join('')}
+        </div>
+      </div>
+      <div class="explore-group">
+        <span class="detail-section-label">${L('categoriesIn')}</span>
+        <div class="chips">
+          ${catOptions.map(c => `<button class="chip chip-filter ${state.filterCat === c ? 'active' : ''}" data-filter-cat="${escapeAttr(c)}">${catLabel(c)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="explore-group">
+        <span class="detail-section-label">${L('genderIn')}</span>
+        <div class="chips">
+          ${genOptions.map(g => `<button class="chip chip-filter ${state.filterGen === g ? 'active' : ''}" data-filter-gen="${g}">${genLabels[g] || g}</button>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function accountFilterScopeLabel() {
+  const unLabels = t(state.lang, 'unLabels');
+  const genLabels = t(state.lang, 'genLabels');
+  const parts = [];
+  if (state.filterUn) parts.push(unLabels[state.filterUn] || state.filterUn);
+  if (state.filterCat) parts.push(catLabel(state.filterCat));
+  if (state.filterGen) parts.push(genLabels[state.filterGen] || state.filterGen);
+  return parts.join(' de ');
+}
+
 function renderCuentaStep() {
   const cd = state.clientePeriodo[state.cliente];
   if (!cd || !cd.hist.length) return `<div class="empty">${L('noData')}</div>`;
@@ -435,13 +504,70 @@ function renderCuentaStep() {
   const canPrev = cd.hist.some(r => r.p < periodo);
   const canNext = cd.hist.some(r => r.p > periodo);
 
+  const filters = { un: state.filterUn, cat: state.filterCat, gen: state.filterGen };
+  const anyFilter = filters.un || filters.cat || filters.gen;
+  const scopeLabel = anyFilter ? accountFilterScopeLabel() : null;
+
+  let statsCardHtml;
+  if (anyFilter) {
+    const curRows = cubeFilterRows(getClientCubeRows(state.cliente, periodo), filters);
+    const curTotals = cubeTotals(curRows);
+    const pyRows = cubeFilterRows(getClientCubeRows(state.cliente, periodo - 100), filters);
+    const pyTotals = cubeTotals(pyRows);
+    const growthUnits = pyTotals.u ? (curTotals.u - pyTotals.u) / Math.abs(pyTotals.u) : null;
+    const growthValor = pyTotals.v ? (curTotals.v - pyTotals.v) / Math.abs(pyTotals.v) : null;
+    const { avg } = clientCubeAvgTrailing(state.cliente, filters, periodo, 12);
+    const woh = (avg && avg !== 0) ? (curTotals.e / avg) * 4.33 : null;
+    statsCardHtml = `
+      <div class="card stats-card">
+        <div class="stats-title">${L('accountOverview')} — ${scopeLabel}</div>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-value">${fmtMoney(curTotals.v)}</div>
+            <div class="stat-label">${L('salesAmount')}</div>
+            <div class="stat-sub ${gClass(growthValor)}">${fmtPct(growthValor)}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtUnits(curTotals.u)}</div>
+            <div class="stat-label">${L('unitsSold')}</div>
+            <div class="stat-sub ${gClass(growthUnits)}">${fmtPct(growthUnits)}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtUnits(curTotals.e)}</div>
+            <div class="stat-label">${L('inventoryUnits')}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${fmtWoh(woh)}</div>
+            <div class="stat-label">${L('woh')}</div>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    statsCardHtml = renderStatsCard(metrics, L('accountOverview'));
+  }
+
   const sucursalesRaw = (state.nav[state.region][state.pais][state.cliente] || []);
   const sucursalesConVenta = sucursalesRaw.map(s => {
-    const sucSeries = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s] && state.sucursalPeriodo[state.cliente][s].periods) || [];
+    const sucStore = (state.sucursalPeriodo[state.cliente] && state.sucursalPeriodo[state.cliente][s]) || null;
+    const sucSeries = sucStore ? sucStore.periods : [];
     const sucRow = sucSeries.find(r => r.p === periodo);
     const pyRow = sucSeries.find(r => r.p === periodo - 100);
-    const growthValor = (sucRow && pyRow && pyRow.v) ? (sucRow.v - pyRow.v) / Math.abs(pyRow.v) : null;
-    return { s, v: sucRow ? sucRow.v : -1, sucRow, growthValor };
+
+    let v, growthValor, hasData;
+    if (anyFilter) {
+      const curRows = cubeFilterRows((sucStore && sucStore.cube && sucStore.cube[String(periodo)]) || [], filters);
+      const curT = cubeTotals(curRows);
+      const pyRows = cubeFilterRows((sucStore && sucStore.cube && sucStore.cube[String(periodo - 100)]) || [], filters);
+      const pyT = cubeTotals(pyRows);
+      v = curT.v;
+      growthValor = pyT.v ? (curT.v - pyT.v) / Math.abs(pyT.v) : null;
+      hasData = !!sucRow; // la sucursal reportó ese mes, aunque esta combinación específica dé 0
+    } else {
+      v = sucRow ? sucRow.v : -1;
+      growthValor = (sucRow && pyRow && pyRow.v) ? (sucRow.v - pyRow.v) / Math.abs(pyRow.v) : null;
+      hasData = !!sucRow;
+    }
+    return { s, v, hasData, growthValor };
   }).sort((a, b) => b.v - a.v);
 
   return `
@@ -455,19 +581,20 @@ function renderCuentaStep() {
     </div>
     ${yayaBubble(L('beforeStore'))}
     ${renderClassificationCard(metrics, streak, form)}
-    ${renderStatsCard(metrics, L('accountOverview'))}
-    ${renderAvgSalesBubble(metrics)}
-    ${renderAccountRecoCard(metrics)}
-    ${trend ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
+    ${statsCardHtml}
+    ${!anyFilter ? renderAvgSalesBubble(metrics) : ''}
+    ${!anyFilter ? renderAccountRecoCard(metrics) : ''}
+    ${trend && !anyFilter ? yayaBubble(trend.positive ? L('trendPositive', trend.months) : L('trendNegative', trend.months)) : ''}
+    ${renderAccountFilters(state.cliente, periodo)}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
-      ${sucursalesConVenta.map(({ s, sucRow, growthValor }) => {
+      ${sucursalesConVenta.map(({ s, hasData, v, growthValor }) => {
         return `
         <button class="pick-row" data-pick="sucursal" data-value="${escapeAttr(s)}">
           <span class="pick-row-title">${titleCase(s)}</span>
           <span class="pick-row-right">
-            ${sucRow ? `
-              <span class="pick-row-sales">${fmtMoneyShort(sucRow.v)}</span>
+            ${hasData ? `
+              <span class="pick-row-sales">${fmtMoneyShort(v)}</span>
               <span class="pick-row-growth ${gClass(growthValor)}">${fmtPct(growthValor)}</span>
             ` : `<span class="pick-row-sales pick-row-sales-empty">${L('noMovementShort')}</span>`}
             <span class="chevron">›</span>
