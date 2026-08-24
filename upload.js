@@ -30,6 +30,14 @@ function remapRegion(pais, rawRegion) {
   return rawRegion;
 }
 
+// Algunas cuentas vienen mal etiquetadas de país en el sistema de origen
+// (algunas de sus sucursales, en algunos meses). Se corrige aquí para que
+// TODA carga futura por el botón ⇪ quede bien, no solo la que se procesó
+// manualmente una vez.
+const PAIS_OVERRIDE = {
+  'CALZADO FINO': 'GUATEMALA'
+};
+
 async function parseUploadedFile(file) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
@@ -62,9 +70,9 @@ async function parseUploadedFile(file) {
     periodosVistos.add(periodo);
 
     const rawRegion = String(r[cols.region] ?? '').trim();
-    const pais = String(r[cols.pais] ?? '').trim();
-    const region = remapRegion(pais, rawRegion);
     const cliente = String(r[cols.cliente] ?? '').trim();
+    const pais = PAIS_OVERRIDE[cliente] || String(r[cols.pais] ?? '').trim();
+    const region = remapRegion(pais, rawRegion);
     const sucursal = String(r[cols.sucursal] ?? '').trim();
     const marca = r[cols.marca];
     const cat = String(r[cols.cat] ?? '').trim();
