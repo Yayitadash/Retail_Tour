@@ -302,6 +302,44 @@ function renderBreadcrumb() {
 }
 
 // ---------- Step: Región ----------
+/** Suma ventas del mes que tengan reportado la mayoría de las cuentas de esta región/país (y su crecimiento vs. año anterior, comparando solo cuentas que ya tienen ambos periodos) */
+function computeGeoTotals(region, pais) {
+  const clientesToCheck = new Set();
+  if (pais) {
+    Object.keys(state.nav[region][pais] || {}).forEach(c => clientesToCheck.add(c));
+  } else {
+    Object.values(state.nav[region] || {}).forEach(paisMap => Object.keys(paisMap).forEach(c => clientesToCheck.add(c)));
+  }
+  if (!clientesToCheck.size) return { v: null, growth: null, periodo: null };
+
+  // El periodo de referencia es el que más cuentas de este grupo ya tienen
+  // reportado (así una región atrasada no se compara con un mes casi vacío)
+  const countByPeriodo = {};
+  for (const cliente of clientesToCheck) {
+    const hist = state.clientePeriodo[cliente] ? state.clientePeriodo[cliente].hist : [];
+    if (!hist.length) continue;
+    const lastP = hist[hist.length - 1].p;
+    countByPeriodo[lastP] = (countByPeriodo[lastP] || 0) + 1;
+  }
+  const periodo = Object.keys(countByPeriodo).sort((a, b) => countByPeriodo[b] - countByPeriodo[a] || b - a)[0];
+  if (!periodo) return { v: null, growth: null, periodo: null };
+  const periodoNum = Number(periodo);
+  const pyPeriodo = periodoNum - 100;
+
+  let curV = 0, pyV = 0;
+  for (const cliente of clientesToCheck) {
+    const hist = state.clientePeriodo[cliente] ? state.clientePeriodo[cliente].hist : [];
+    const curRow = hist.find(r => r.p === periodoNum);
+    const pyRow = hist.find(r => r.p === pyPeriodo);
+    // Solo se compara con las cuentas que ya reportaron AMBOS periodos —
+    // así una cuenta que aún no carga el mes actual no infla la caída.
+    if (curRow) curV += curRow.v;
+    if (curRow && pyRow) pyV += pyRow.v;
+  }
+  const growth = pyV ? (curV - pyV) / Math.abs(pyV) : null;
+  return { v: curV, growth, periodo: periodoNum };
+}
+
 function renderRegionStep() {
   const regions = Object.keys(state.nav);
   return `
@@ -310,12 +348,16 @@ function renderRegionStep() {
       <h1>${L('askRegion')}</h1>
     </div>
     <div class="card-grid">
-      ${regions.map(r => `
+      ${regions.map(r => {
+        const { v, growth, periodo } = computeGeoTotals(r, null);
+        return `
         <button class="pick-card" data-pick="region" data-value="${r}">
           <span class="pick-title">${REGION_LABELS[r] || r}</span>
           <span class="pick-meta">${Object.keys(state.nav[r]).length} ${L('countries')}</span>
-        </button>
-      `).join('')}
+          <span class="pick-money">${fmtMoneyShort(v)} <span class="pick-money-period">${periodo ? periodoLabelI18n(periodo, state.lang) : ''}</span></span>
+          <span class="pick-growth ${gClass(growth)}">${fmtPct(growth)}</span>
+        </button>`;
+      }).join('')}
     </div>
     ${renderClasifGuide()}`;
 }
@@ -345,12 +387,16 @@ function renderPaisStep() {
       <h1>${L('askPais')}</h1>
     </div>
     <div class="card-grid">
-      ${paises.map(p => `
+      ${paises.map(p => {
+        const { v, growth, periodo } = computeGeoTotals(state.region, p);
+        return `
         <button class="pick-card" data-pick="pais" data-value="${p}">
           <span class="pick-title">${titleCase(p)}</span>
           <span class="pick-meta">${Object.keys(state.nav[state.region][p]).length} ${L('accounts')}</span>
-        </button>
-      `).join('')}
+          <span class="pick-money">${fmtMoneyShort(v)} <span class="pick-money-period">${periodo ? periodoLabelI18n(periodo, state.lang) : ''}</span></span>
+          <span class="pick-growth ${gClass(growth)}">${fmtPct(growth)}</span>
+        </button>`;
+      }).join('')}
     </div>`;
 }
 
