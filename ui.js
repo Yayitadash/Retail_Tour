@@ -419,7 +419,14 @@ function renderClienteStep() {
   const clientes = Object.keys(state.nav[state.region][state.pais]).sort();
   const clientesConClasif = clientes.map(c => {
     const cd = state.clientePeriodo[c];
-    return { c, clasif: lastKnownClasif(cd && cd.hist) };
+    let clasif = null, v = null, growth = null;
+    if (cd && cd.hist.length) {
+      clasif = lastKnownClasif(cd.hist);
+      const lastP = cd.hist[cd.hist.length - 1].p;
+      const m = computeMetricsForPeriod(cd.hist, lastP);
+      if (m) { v = m.valor; growth = m.growthValor; }
+    }
+    return { c, clasif, v, growth };
   });
 
   const presentClasifs = new Set(clientesConClasif.map(x => x.clasif).filter(Boolean));
@@ -456,14 +463,20 @@ function renderClienteStep() {
         <button class="filter-clear-btn" id="filterClearBtn">${L('seeAllAccounts')}</button>
       </div>` : ''}
     <div class="pick-list">
-      ${visibles.map(({ c, clasif }) => {
+      ${visibles.map(({ c, clasif, v, growth }) => {
         const badge = clasif
           ? `<span class="mini-badge-icon" style="--c:${CLASIFICACIONES[clasif].color}" title="${classifLabel(clasif, state.lang)} — ${classifDesc(clasif, state.lang)}">${CLASIFICACIONES[clasif].icon}</span>`
           : '';
         return `
         <button class="pick-row" data-pick="cliente" data-value="${escapeAttr(c)}">
           <span class="pick-row-title">${titleCase(c)}</span>
-          ${badge}
+          <span class="pick-row-right">
+            ${v !== null ? `
+              <span class="pick-row-sales">${fmtMoneyShort(v)}</span>
+              <span class="pick-row-growth ${gClass(growth)}">${fmtPct(growth)}</span>
+            ` : ''}
+            ${badge}
+          </span>
         </button>`;
       }).join('')}
     </div>`;
