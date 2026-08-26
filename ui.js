@@ -188,7 +188,11 @@ function pushHistory() {
 
 /** Determina qué clientes hacen falta para la pantalla actual y trae sus datos si no están */
 async function ensureShardsForContext() {
-  if (state.step === 'cliente' && state.nav && state.region && state.pais) {
+  if (state.step === 'pais' && state.nav && state.region) {
+    const clientes = [];
+    Object.values(state.nav[state.region] || {}).forEach(paisMap => clientes.push(...Object.keys(paisMap)));
+    await ensureClienteDataLoaded(state, clientes);
+  } else if (state.step === 'cliente' && state.nav && state.region && state.pais) {
     const clientes = Object.keys(state.nav[state.region][state.pais] || {});
     await ensureClienteDataLoaded(state, clientes);
   } else if ((state.step === 'cuenta' || state.step === 'sucursal') && state.cliente) {
@@ -198,7 +202,7 @@ async function ensureShardsForContext() {
 
 /** Igual que render(), pero primero se asegura de tener los datos de sucursales que hagan falta */
 async function renderWithData() {
-  const needsShards = (state.step === 'cliente' || state.step === 'cuenta' || state.step === 'sucursal');
+  const needsShards = (state.step === 'pais' || state.step === 'cliente' || state.step === 'cuenta' || state.step === 'sucursal');
   if (needsShards) {
     renderLoading();
     try {
@@ -302,34 +306,33 @@ function renderBreadcrumb() {
 }
 
 // ---------- Step: Región ----------
-/** Suma ventas del mes que tengan reportado la mayoría de las cuentas de esta región/país (y su crecimiento vs. año anterior, comparando solo cuentas que ya tienen ambos periodos) */
+function getGlobalLatestPeriodo() {
+  let max = null;
+  for (const cliente in state.clientePeriodo) {
+    const hist = state.clientePeriodo[cliente].hist;
+    if (hist.length) {
+      const p = hist[hist.length - 1].p;
+      if (max === null || p > max) max = p;
+    }
+  }
+  return max;
+}
+
+/** Suma ventas del mes más reciente disponible (y su crecimiento vs. año anterior, comparando solo cuentas que ya tienen ambos periodos) para una región, o para un país dentro de una región */
 function computeGeoTotals(region, pais) {
+  const periodo = getGlobalLatestPeriodo();
+  if (!periodo) return { v: null, growth: null, periodo: null };
+  const pyPeriodo = periodo - 100;
   const clientesToCheck = new Set();
   if (pais) {
     Object.keys(state.nav[region][pais] || {}).forEach(c => clientesToCheck.add(c));
   } else {
     Object.values(state.nav[region] || {}).forEach(paisMap => Object.keys(paisMap).forEach(c => clientesToCheck.add(c)));
   }
-  if (!clientesToCheck.size) return { v: null, growth: null, periodo: null };
-
-  // El periodo de referencia es el que más cuentas de este grupo ya tienen
-  // reportado (así una región atrasada no se compara con un mes casi vacío)
-  const countByPeriodo = {};
-  for (const cliente of clientesToCheck) {
-    const hist = state.clientePeriodo[cliente] ? state.clientePeriodo[cliente].hist : [];
-    if (!hist.length) continue;
-    const lastP = hist[hist.length - 1].p;
-    countByPeriodo[lastP] = (countByPeriodo[lastP] || 0) + 1;
-  }
-  const periodo = Object.keys(countByPeriodo).sort((a, b) => countByPeriodo[b] - countByPeriodo[a] || b - a)[0];
-  if (!periodo) return { v: null, growth: null, periodo: null };
-  const periodoNum = Number(periodo);
-  const pyPeriodo = periodoNum - 100;
-
   let curV = 0, pyV = 0;
   for (const cliente of clientesToCheck) {
     const hist = state.clientePeriodo[cliente] ? state.clientePeriodo[cliente].hist : [];
-    const curRow = hist.find(r => r.p === periodoNum);
+    const curRow = hist.find(r => r.p === periodo);
     const pyRow = hist.find(r => r.p === pyPeriodo);
     // Solo se compara con las cuentas que ya reportaron AMBOS periodos —
     // así una cuenta que aún no carga el mes actual no infla la caída.
@@ -337,7 +340,7 @@ function computeGeoTotals(region, pais) {
     if (curRow && pyRow) pyV += pyRow.v;
   }
   const growth = pyV ? (curV - pyV) / Math.abs(pyV) : null;
-  return { v: curV, growth, periodo: periodoNum };
+  return { v: curV, growth, periodo };
 }
 
 function renderRegionStep() {
@@ -354,7 +357,7 @@ function renderRegionStep() {
         <button class="pick-card" data-pick="region" data-value="${r}">
           <span class="pick-title">${REGION_LABELS[r] || r}</span>
           <span class="pick-meta">${Object.keys(state.nav[r]).length} ${L('countries')}</span>
-          <span class="pick-money">${fmtMoneyShort(v)} <span class="pick-money-period">${periodo ? periodoLabelI18n(periodo, state.lang) : ''}</span></span>
+          <span class="pick-money">${fmtMoneyShort(v)}</span>
           <span class="pick-growth ${gClass(growth)}">${fmtPct(growth)}</span>
         </button>`;
       }).join('')}
@@ -393,7 +396,7 @@ function renderPaisStep() {
         <button class="pick-card" data-pick="pais" data-value="${p}">
           <span class="pick-title">${titleCase(p)}</span>
           <span class="pick-meta">${Object.keys(state.nav[state.region][p]).length} ${L('accounts')}</span>
-          <span class="pick-money">${fmtMoneyShort(v)} <span class="pick-money-period">${periodo ? periodoLabelI18n(periodo, state.lang) : ''}</span></span>
+          <span class="pick-money">${fmtMoneyShort(v)}</span>
           <span class="pick-growth ${gClass(growth)}">${fmtPct(growth)}</span>
         </button>`;
       }).join('')}
