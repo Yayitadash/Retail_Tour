@@ -82,6 +82,38 @@ async function loadAllData() {
  * cliente tiene meses subidos por el botón ⇪ — todo por cliente, nunca
  * "todo de todos" de una vez.
  */
+/**
+ * Versión liviana de arriba: solo trae las ventas totales por cliente
+ * (cliente_periodo), sin el detalle pesado de sucursales/cubo. Se usa en
+ * segundo plano para que los montos de región/país estén al día desde la
+ * primera pantalla, sin tener que cargar todo el detalle de cada cuenta.
+ */
+async function prefetchAllClientePeriodo(state) {
+  let fb;
+  try { fb = window.__fb || await initFirebase(); } catch (err) { console.warn('Firestore no disponible:', err); return; }
+
+  const allClientes = new Set();
+  for (const region in state.nav) {
+    for (const pais in state.nav[region]) {
+      for (const cliente in state.nav[region][pais]) allClientes.add(cliente);
+    }
+  }
+  const pending = Array.from(allClientes).filter(c => !state.loadedClientUploads.has(c));
+  if (!pending.length) return;
+
+  await Promise.all(pending.map(async cliente => {
+    try {
+      const periodsCol = fb.collection(fb.db, 'monthly_uploads_by_client', clientDocId(cliente), 'periods');
+      const snap = await fb.getDocs(periodsCol);
+      snap.forEach(docSnap => {
+        mergeClientePeriodo(state.clientePeriodo, docSnap.data().cliente_periodo || {});
+      });
+    } catch (err) {
+      console.warn('No se pudo pre-cargar ventas de', cliente, err);
+    }
+  }));
+}
+
 async function ensureClienteDataLoaded(state, clienteNames) {
   const shardsNeeded = new Set();
   for (const cliente of clienteNames) {

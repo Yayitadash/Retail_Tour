@@ -145,6 +145,12 @@ function renderGreetingCard() {
     state.step = 'region';
     pushHistory();
     render();
+    // En segundo plano, sin bloquear: trae las ventas de todas las cuentas
+    // (livianas) para que los montos de región/país estén al día ya desde
+    // esta primera pantalla, sin cargar el detalle pesado de sucursales.
+    prefetchAllClientePeriodo(state).then(() => {
+      if (state.step === 'region' || state.step === 'pais') render();
+    });
   });
 }
 
