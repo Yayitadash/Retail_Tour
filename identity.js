@@ -25,7 +25,15 @@ function saveLang(lang) {
 function hasAccess() {
   return localStorage.getItem('rt_access_version') === String(APP_ACCESS_VERSION);
 }
-function saveAccess() {
+function saveAccess(role) {
   localStorage.setItem('rt_access_version', String(APP_ACCESS_VERSION));
+  localStorage.setItem('rt_access_role', role);
+}
+function getAccessRole() {
+  // Los celulares que ya tenían acceso ANTES de que existiera el rol
+  // (todo tu equipo actual) quedan como Estándar automáticamente, sin
+  // tener que volver a escribir ninguna clave.
+  const stored = localStorage.getItem('rt_access_role');
+  return stored === 'full' ? 'full' : 'standard';
 }
 
