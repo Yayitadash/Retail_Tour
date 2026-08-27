@@ -5,6 +5,7 @@
 const state = {
   nav: null, clientePeriodo: null, sucursalPeriodo: null,
   shardMap: null, loadedShards: null, loadedClientUploads: null,
+  userRole: 'standard', // 'standard' | 'full' — según la clave con la que entró
   step: 'welcome', // welcome | region | pais | cliente | cuenta | sucursal
   region: null, pais: null, cliente: null, sucursal: null,
   periodo: null,
@@ -71,10 +72,12 @@ function yayaBubble(text, extraClass) {
 }
 
 // ---------- Boot ----------
-// Para cambiar la clave: edita APP_ACCESS_CODE Y sube en 1 el número de
-// APP_ACCESS_VERSION. Eso hace que TODOS los dispositivos (incluso los que
-// ya tenían acceso) tengan que volver a escribir la clave nueva.
-const APP_ACCESS_CODE = '1234';
+// Para cambiar cualquiera de las dos claves: edita el texto Y sube en 1 el
+// número de APP_ACCESS_VERSION. Eso hace que TODOS los dispositivos (incluso
+// los que ya tenían acceso, de cualquiera de los dos niveles) tengan que
+// volver a escribir la clave nueva.
+const APP_ACCESS_CODE = '1234';       // Acceso Estándar (vendedor / lead jr.)
+const APP_ACCESS_CODE_FULL = '5678';  // Acceso Completo (lead senior / director)
 const APP_ACCESS_VERSION = 1;
 
 async function boot() {
@@ -82,6 +85,7 @@ async function boot() {
     renderAccessGate();
     return;
   }
+  state.userRole = getAccessRole();
   if (!state.user) {
     state.step = 'welcome';
     renderWelcome();
@@ -104,7 +108,10 @@ function renderAccessGate(error) {
   const submit = () => {
     const val = document.getElementById('accessInput').value.trim();
     if (val === APP_ACCESS_CODE) {
-      saveAccess();
+      saveAccess('standard');
+      boot();
+    } else if (val === APP_ACCESS_CODE_FULL) {
+      saveAccess('full');
       boot();
     } else {
       renderAccessGate(true);
