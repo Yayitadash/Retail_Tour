@@ -43,7 +43,8 @@ const PAIS_OVERRIDE = {
 // tiempo (o traen variantes según el mes). Se unifican aquí bajo un solo
 // nombre para que nunca vuelvan a aparecer duplicadas en la app.
 const CLIENTE_OVERRIDE = {
-  'FASHION USA ATHLETICS DR S.R.L.': 'FASHION USA'
+  'FASHION USA ATHLETICS DR S.R.L.': 'FASHION USA',
+  'BEAUTY-LOOK N.V.': 'SHOE BALOO'
 };
 
 let _knownClienteIndex = null;
