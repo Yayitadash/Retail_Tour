@@ -45,6 +45,28 @@ const CLIENTE_OVERRIDE = {
   'FASHION USA ATHLETICS DR S.R.L.': 'FASHION USA'
 };
 
+let _knownClienteIndex = null;
+/**
+ * Busca si ya existe un cliente conocido con este mismo nombre, sin
+ * importar mayúsculas/minúsculas, y devuelve su forma exacta ya
+ * establecida (algunas cuentas como "TEC Multibrand" no están en mayúsculas
+ * completas). Devuelve null si es un cliente nuevo, nunca visto antes.
+ */
+function knownClienteCasing(nameUpperCase) {
+  if (!_knownClienteIndex) {
+    _knownClienteIndex = {};
+    const shardMap = (typeof state !== 'undefined' && state.shardMap) || {};
+    for (const name in shardMap) _knownClienteIndex[name.toUpperCase()] = name;
+    const nav = (typeof state !== 'undefined' && state.nav) || {};
+    for (const region in nav) {
+      for (const pais in nav[region]) {
+        for (const name in nav[region][pais]) _knownClienteIndex[name.toUpperCase()] = name;
+      }
+    }
+  }
+  return _knownClienteIndex[nameUpperCase] || null;
+}
+
 async function parseUploadedFile(file) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
@@ -77,8 +99,12 @@ async function parseUploadedFile(file) {
     periodosVistos.add(periodo);
 
     const rawRegion = String(r[cols.region] ?? '').trim();
-    const clienteRaw = String(r[cols.cliente] ?? '').trim();
-    const cliente = CLIENTE_OVERRIDE[clienteRaw.toUpperCase()] || clienteRaw;
+    const clienteInput = String(r[cols.cliente] ?? '').trim();
+    const clienteUC = (CLIENTE_OVERRIDE[clienteInput.toUpperCase()] || clienteInput).toUpperCase();
+    // Si ya existe un cliente conocido con este mismo nombre (sin importar
+    // mayúsculas/minúsculas), se usa la forma exacta que ya está establecida
+    // — así "Fashion Usa" y "FASHION USA" nunca se separan en dos cuentas.
+    const cliente = knownClienteCasing(clienteUC) || (CLIENTE_OVERRIDE[clienteInput.toUpperCase()] || clienteInput);
     const pais = PAIS_OVERRIDE[cliente] || String(r[cols.pais] ?? '').trim();
     const region = remapRegion(pais, rawRegion);
     const sucursal = String(r[cols.sucursal] ?? '').trim();
