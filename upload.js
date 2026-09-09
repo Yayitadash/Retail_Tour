@@ -35,7 +35,8 @@ function remapRegion(pais, rawRegion) {
 // TODA carga futura por el botón ⇪ quede bien, no solo la que se procesó
 // manualmente una vez.
 const PAIS_OVERRIDE = {
-  'CALZADO FINO': 'GUATEMALA'
+  'CALZADO FINO': 'GUATEMALA',
+  'RAVENNA': 'ZONA LIBRE DE COLON'
 };
 
 // Algunas cuentas cambian de nombre legal en el sistema de origen con el
