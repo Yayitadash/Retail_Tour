@@ -38,6 +38,13 @@ const PAIS_OVERRIDE = {
   'CALZADO FINO': 'GUATEMALA'
 };
 
+// Algunas cuentas cambian de nombre legal en el sistema de origen con el
+// tiempo (o traen variantes según el mes). Se unifican aquí bajo un solo
+// nombre para que nunca vuelvan a aparecer duplicadas en la app.
+const CLIENTE_OVERRIDE = {
+  'FASHION USA ATHLETICS DR S.R.L.': 'FASHION USA'
+};
+
 async function parseUploadedFile(file) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
@@ -70,7 +77,8 @@ async function parseUploadedFile(file) {
     periodosVistos.add(periodo);
 
     const rawRegion = String(r[cols.region] ?? '').trim();
-    const cliente = String(r[cols.cliente] ?? '').trim();
+    const clienteRaw = String(r[cols.cliente] ?? '').trim();
+    const cliente = CLIENTE_OVERRIDE[clienteRaw.toUpperCase()] || clienteRaw;
     const pais = PAIS_OVERRIDE[cliente] || String(r[cols.pais] ?? '').trim();
     const region = remapRegion(pais, rawRegion);
     const sucursal = String(r[cols.sucursal] ?? '').trim();
