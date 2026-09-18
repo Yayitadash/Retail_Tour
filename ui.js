@@ -1269,12 +1269,12 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${titleCase(cliente)} — Retail Tour</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root{
     --paper:#F6F3EC; --paper-card:#FFFFFF; --ink:#17202A; --text:#2A322D; --text-soft:#6B6459;
     --line:#E4DFD3; --gold:#C89B3C; --gold-soft:#EDE0C2; --steel:#3A5A78; --red:#B4432F; --green:#3E7A4F;
-    --radius:14px; --font-display:'Anton',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'IBM Plex Mono',monospace;
+    --radius:14px; --font-display:'Big Shoulders Display',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'IBM Plex Mono',monospace;
   }
   *{box-sizing:border-box;}
   body{margin:0; background:var(--paper); color:var(--text); font-family:var(--font-body); line-height:1.5; -webkit-font-smoothing:antialiased;}
@@ -1282,7 +1282,7 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   header{display:flex; justify-content:space-between; align-items:flex-start; padding:32px 0 24px; border-bottom:2px solid var(--ink); gap:16px; flex-wrap:wrap;}
   .brand{display:flex; flex-direction:column; gap:2px;}
   .brand-eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:0.06em; color:var(--gold); text-transform:uppercase;}
-  .brand-name{font-family:var(--font-display); font-weight:400; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
+  .brand-name{font-family:var(--font-display); font-weight:900; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
   .brand-period{font-size:14px; color:var(--text-soft); margin-top:4px;}
   .lang-btn{font-family:var(--font-mono); font-size:12px; font-weight:500; letter-spacing:0.03em; border:1.5px solid var(--ink); background:none; color:var(--ink); padding:8px 14px; border-radius:8px; cursor:pointer;}
   .lang-btn:hover{background:var(--ink); color:var(--paper);}
@@ -1294,7 +1294,7 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .filter-clear-all{font-family:var(--font-mono); font-size:11.5px; color:var(--red); background:none; border:none; cursor:pointer; text-decoration:underline; padding:5px 0;}
   .hero{padding:32px 0 8px; text-align:center;}
   .hero-label{font-size:14px; color:var(--text-soft); margin-bottom:8px;}
-  .hero-number{font-family:var(--font-display); font-weight:400; font-size:clamp(56px,12vw,104px); color:var(--ink); line-height:1;}
+  .hero-number{font-family:var(--font-display); font-weight:900; font-size:clamp(56px,12vw,104px); color:var(--ink); line-height:1;}
   .hero-growth{font-family:var(--font-mono); font-weight:600; font-size:17px; margin-top:10px;}
   .hero-growth-empty{font-family:var(--font-body); font-weight:400; font-size:12.5px; color:var(--text-soft); font-style:italic;}
   .hero-sub{display:flex; justify-content:center; gap:36px; margin-top:26px; flex-wrap:wrap;}
@@ -1310,7 +1310,7 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .insight-note-text{font-size:14px; line-height:1.5; color:var(--text-soft); font-style:italic;}
   section{margin-top:48px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:12px;}
-  .section-title{font-family:var(--font-display); font-weight:400; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
+  .section-title{font-family:var(--font-display); font-weight:800; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
   .section-note{font-size:12px; color:var(--text-soft);}
   .podium-list{display:flex; flex-direction:column; gap:9px;}
   .podium-row{display:grid; grid-template-columns:26px 1fr 44px auto; align-items:center; gap:12px; background:var(--paper-card); border:1.5px solid var(--line); border-radius:var(--radius); padding:12px 16px; cursor:pointer; text-align:left; width:100%; font-family:inherit; color:inherit;}
@@ -1319,7 +1319,7 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .podium-row.dim{opacity:0.4;}
   .store-back-btn{display:flex; align-items:center; justify-content:center; gap:6px; background:none; border:1.5px dashed var(--line); border-radius:var(--radius); padding:11px 16px; font-family:var(--font-mono); font-size:12.5px; color:var(--text-soft); cursor:pointer; width:100%;}
   .store-back-btn:hover{border-color:var(--gold); color:var(--ink);}
-  .podium-rank{font-family:var(--font-display); font-weight:400; font-size:18px; color:var(--gold); text-align:center;}
+  .podium-rank{font-family:var(--font-display); font-weight:800; font-size:18px; color:var(--gold); text-align:center;}
   .podium-main{display:flex; flex-direction:column; gap:5px; min-width:0;}
   .podium-name{font-weight:600; font-size:14px; color:var(--ink);}
   .podium-track{background:var(--paper); border-radius:6px; height:7px; overflow:hidden;}
