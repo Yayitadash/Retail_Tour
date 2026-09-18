@@ -188,7 +188,7 @@
 
   /* ---------- Period nav ---------- */
   .period-nav {
-    display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 18px;
+    display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 18px; position: relative;
   }
   .period-arrow {
     background: var(--paper-card); border: 1px solid var(--line); border-radius: 50%;
@@ -196,6 +196,12 @@
   }
   .period-arrow:disabled { opacity: 0.3; cursor: default; }
   .period-label { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: 0.3px; }
+  .download-report-btn {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    background: var(--paper-card); border: 1px solid var(--line); border-radius: 50%;
+    width: 34px; height: 34px; font-size: 16px; cursor: pointer; color: var(--amber);
+  }
+  .download-report-btn:hover { border-color: var(--amber); }
 
   /* ---------- Cards (briefing) ---------- */
   .card {
