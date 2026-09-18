@@ -1226,8 +1226,27 @@ function attachHandlers() {
 // ============================================================
 function downloadAccountReport(cliente, periodo) {
   const rows = getClientCubeRowsWithStore(cliente, periodo);
+  const pyPeriodo = periodo - 100;
+  const pyRows = getClientCubeRowsWithStore(cliente, pyPeriodo);
   const anio = Math.floor(periodo / 100), mes = periodo % 100;
-  const html = buildAccountReportHTML(cliente, mes, anio, rows);
+
+  // Comentario/hallazgo automático (mismo motor que usa la app), generado en
+  // ambos idiomas de una vez para que el reporte descargado pueda cambiar de
+  // idioma sin depender de la app. Sin ninguna referencia a "Yaya": este
+  // documento puede terminar en manos del cliente, así que el texto va en
+  // tono de análisis neutral, no de asistente.
+  const cd = state.clientePeriodo[cliente];
+  const metrics = cd ? computeMetricsForPeriod(cd.hist, periodo) : null;
+  const clasif = metrics ? metrics.clasif : null;
+  const savedLang = state.lang;
+  let insightEs = null, insightEn = null;
+  if (clasif) {
+    state.lang = 'es'; insightEs = findAccountInsight(cliente, periodo, clasif);
+    state.lang = 'en'; insightEn = findAccountInsight(cliente, periodo, clasif);
+  }
+  state.lang = savedLang;
+
+  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn });
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1241,8 +1260,8 @@ function downloadAccountReport(cliente, periodo) {
 }
 
 
-function buildAccountReportHTML(cliente, mes, anio, rows) {
-  const dataJson = JSON.stringify({ cliente, periodo: { mes, anio }, rows });
+function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
+  const dataJson = JSON.stringify({ cliente, periodo: { mes, anio }, rows, pyRows: pyRows || [], insight: insight || { es: null, en: null } });
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1276,10 +1295,19 @@ function buildAccountReportHTML(cliente, mes, anio, rows) {
   .hero{padding:32px 0 8px; text-align:center;}
   .hero-label{font-size:13px; color:var(--text-soft); margin-bottom:6px;}
   .hero-number{font-family:var(--font-display); font-weight:400; font-size:clamp(40px,8vw,68px); color:var(--ink); line-height:1;}
+  .hero-growth{font-family:var(--font-mono); font-weight:600; font-size:14px; margin-top:8px;}
+  .hero-growth-empty{font-family:var(--font-body); font-weight:400; font-size:12.5px; color:var(--text-soft); font-style:italic;}
   .hero-sub{display:flex; justify-content:center; gap:28px; margin-top:18px; flex-wrap:wrap;}
   .hero-stat{text-align:center;}
   .hero-stat-value{font-family:var(--font-mono); font-weight:500; font-size:20px; color:var(--ink);}
   .hero-stat-label{font-size:11.5px; color:var(--text-soft); margin-top:2px;}
+  .hero-stat-growth{font-family:var(--font-mono); font-weight:600; font-size:11.5px; margin-top:3px;}
+  .podium-growth{font-family:var(--font-mono); font-weight:600; font-size:11px; margin-top:2px;}
+  .stat-pos{color:var(--green);}
+  .stat-neg{color:var(--red);}
+  .insight-note{background:var(--paper-card); border:1.5px solid var(--gold-soft); border-left:4px solid var(--gold); border-radius:var(--radius); padding:14px 18px; margin:24px 0 0;}
+  .insight-note-label{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold); margin-bottom:5px;}
+  .insight-note-text{font-size:13.5px; line-height:1.5; color:var(--text);}
   section{margin-top:48px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:12px;}
   .section-title{font-family:var(--font-display); font-weight:400; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
@@ -1289,6 +1317,8 @@ function buildAccountReportHTML(cliente, mes, anio, rows) {
   .podium-row:hover{border-color:var(--gold-soft);}
   .podium-row.active{border-color:var(--gold); background:color-mix(in srgb, var(--gold) 6%, white);}
   .podium-row.dim{opacity:0.4;}
+  .store-back-btn{display:flex; align-items:center; justify-content:center; gap:6px; background:none; border:1.5px dashed var(--line); border-radius:var(--radius); padding:11px 16px; font-family:var(--font-mono); font-size:12.5px; color:var(--text-soft); cursor:pointer; width:100%;}
+  .store-back-btn:hover{border-color:var(--gold); color:var(--ink);}
   .podium-rank{font-family:var(--font-display); font-weight:400; font-size:18px; color:var(--gold); text-align:center;}
   .podium-main{display:flex; flex-direction:column; gap:5px; min-width:0;}
   .podium-name{font-weight:600; font-size:14px; color:var(--ink);}
@@ -1334,30 +1364,38 @@ const I18N = {
   es: { eyebrow:'Retail Tour — Reporte de cuenta', periodLabel:(m,a)=>MESES.es[m-1]+' '+a, heroLabelAll:'Venta total del periodo', heroLabelFiltered:'Venta de la selección',
     unitsLabel:'Unidades vendidas', inventoryLabel:'Unidades en inventario', wohLabel:'Semanas de inventario',
     storesLabel:'Sucursales', storesTitle:'Desempeño por sucursal', storesNote:'toca una para filtrar todo lo demás',
+    storesNoteFiltered:'mostrando solo esta sucursal', backToAllStores:'Ver todas las sucursales',
     unTitle:'Unidad de negocio', catTitle:'Categoría', genTitle:'Género',
     famTitle:'Familias / siluetas líderes', famNote:'top 10 por venta, dentro de la selección',
     famCol1:'Familia / Silueta', famCol2:'Unidades', famCol3:'Venta', famCol4:'% de la selección', famEmpty:'No hay datos para esta combinación.',
     clearAll:'Ver todo', footerLeft:'Preparado con Retail Tour', footerRight:(m,a)=>'Datos de '+MESES.es[m-1].toLowerCase()+' '+a,
+    vsPy:(m,a)=>'vs '+MESES.es[m-1]+' '+a, noPyData:'Sin datos del año anterior para comparar',
+    insightLabel:'Observación',
     un:{FW:'Calzado',APP:'Ropa',EQ:'Equipo',LIC:'Licencias'}, gen:{MEN:'Hombre',WOMEN:'Mujer',KIDS:'Niños'} },
   en: { eyebrow:'Retail Tour — Account report', periodLabel:(m,a)=>MESES.en[m-1]+' '+a, heroLabelAll:'Total sales for the period', heroLabelFiltered:'Sales for this selection',
     unitsLabel:'Units sold', inventoryLabel:'Units in inventory', wohLabel:'Weeks of inventory',
     storesLabel:'Stores', storesTitle:'Performance by store', storesNote:'tap one to filter everything else',
+    storesNoteFiltered:'showing only this store', backToAllStores:'View all stores',
     unTitle:'Business unit', catTitle:'Category', genTitle:'Gender',
     famTitle:'Leading families / silhouettes', famNote:'top 10 by sales, within the selection',
     famCol1:'Family / Silhouette', famCol2:'Units', famCol3:'Sales', famCol4:'% of selection', famEmpty:'No data for this combination.',
     clearAll:'Show all', footerLeft:'Prepared with Retail Tour', footerRight:(m,a)=>MESES.en[m-1]+' '+a+' data',
+    vsPy:(m,a)=>'vs '+MESES.en[m-1]+' '+a, noPyData:'No prior-year data to compare',
+    insightLabel:'Observation',
     un:{FW:'Footwear',APP:'Apparel',EQ:'Equipment',LIC:'Licensed'}, gen:{MEN:'Men',WOMEN:'Women',KIDS:'Kids'} }
 };
 function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2]):v; }
 function fmtMoney(v){ return '$'+Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
 function fmtUnits(v){ return Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
 function fmtPct(v){ return (v*100).toFixed(1)+'%'; }
+function fmtGrowth(v){ if(v===null||v===undefined) return '—'; var pct=(v*100).toFixed(0); return (v>=0?'+':'')+pct+'%'; }
+function gClass(v){ if(v===null||v===undefined) return ''; return v>=0?'stat-pos':'stat-neg'; }
 function computeWoh(e,u){ return u ? (e/u)*4.33 : null; }
 function fmtWoh(v){ return v===null ? '—' : v.toFixed(1); }
 function titleCase(s){ if(!s) return s; var lower=String(s).toLowerCase(); var out=''; for(var i=0;i<lower.length;i++){ var prev = i===0 ? ' ' : lower.charAt(i-1); var isSep = (prev===' '||prev==='/'||prev==='#'); out += isSep ? lower.charAt(i).toUpperCase() : lower.charAt(i); } return out; }
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 function matchesFilters(row,f,exclude){ var dims=['s','un','cat','gen']; for(var i=0;i<dims.length;i++){ var k=dims[i]; if(k===exclude) continue; if(f[k] && row[k]!==f[k]) return false; } return true; }
-function filterRows(exclude){ return DATA.rows.filter(function(r){return matchesFilters(r,filters,exclude);}); }
+function filterRows(exclude,source){ return (source||DATA.rows).filter(function(r){return matchesFilters(r,filters,exclude);}); }
 function sumRows(rows){ return rows.reduce(function(a,r){a.v+=r.v;a.u+=r.u;a.e+=r.e;return a;},{v:0,u:0,e:0}); }
 function groupBy(rows,keyName){ var map={}; rows.forEach(function(r){ var k=r[keyName]; if(!map[k]) map[k]={key:k,v:0,u:0,e:0}; map[k].v+=r.v;map[k].u+=r.u;map[k].e+=r.e; }); return Object.values(map); }
 function anyFilterActive(){ return filters.s||filters.un||filters.cat||filters.gen; }
@@ -1368,8 +1406,15 @@ function render(){
   var totals=sumRows(fullyFiltered);
   var filtered=anyFilterActive();
 
+  var pyRows=DATA.pyRows||[];
+  var hasPy=pyRows.length>0;
+  var pyTotals=sumRows(filterRows(null,pyRows));
+  var growthValor=(hasPy&&pyTotals.v)?(totals.v-pyTotals.v)/Math.abs(pyTotals.v):null;
+  var growthUnits=(hasPy&&pyTotals.u)?(totals.u-pyTotals.u)/Math.abs(pyTotals.u):null;
+
   var storeCandidates=groupBy(filterRows('s'),'s').sort(function(a,b){return b.v-a.v;});
   var storeTotal=storeCandidates.reduce(function(s,x){return s+x.v;},0)||1;
+  var pyStoreMap={}; groupBy(filterRows('s',pyRows),'s').forEach(function(x){ pyStoreMap[x.key]=x; });
   var unCandidates=groupBy(filterRows('un'),'un').sort(function(a,b){return b.v-a.v;});
   var unTotal=unCandidates.reduce(function(s,x){return s+x.v;},0)||1;
   var catCandidatesAll=groupBy(filterRows('cat'),'cat').sort(function(a,b){return b.v-a.v;});
@@ -1400,25 +1445,42 @@ function render(){
   activeChips.forEach(function(c){ html += '<span class="filter-chip">'+chipLabel(c[0],c[1])+'<button data-clear="'+c[0]+'">✕</button></span>'; });
   html += '<button class="filter-clear-all" id="clearAllBtn">'+t('clearAll')+'</button></div>';
 
+  var insightText = DATA.insight && DATA.insight[LANG];
+  if(insightText){
+    html += '<div class="insight-note"><div class="insight-note-label">'+t('insightLabel')+'</div><div class="insight-note-text">'+insightText+'</div></div>';
+  }
+
   html += '<div class="hero"><div class="hero-label">'+(filtered?t('heroLabelFiltered'):t('heroLabelAll'))+'</div>';
-  html += '<div class="hero-number">'+fmtMoney(totals.v)+'</div><div class="hero-sub">';
-  html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(totals.u)+'</div><div class="hero-stat-label">'+t('unitsLabel')+'</div></div>';
+  html += '<div class="hero-number">'+fmtMoney(totals.v)+'</div>';
+  if(hasPy){
+    html += '<div class="hero-growth '+gClass(growthValor)+'">'+fmtGrowth(growthValor)+' '+t('vsPy',DATA.periodo.mes,DATA.periodo.anio-1)+'</div>';
+  } else {
+    html += '<div class="hero-growth hero-growth-empty">'+t('noPyData')+'</div>';
+  }
+  html += '<div class="hero-sub">';
+  html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(totals.u)+'</div><div class="hero-stat-label">'+t('unitsLabel')+'</div>'+(hasPy?'<div class="hero-stat-growth '+gClass(growthUnits)+'">'+fmtGrowth(growthUnits)+'</div>':'')+'</div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(totals.e)+'</div><div class="hero-stat-label">'+t('inventoryLabel')+'</div></div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(computeWoh(totals.e,totals.u))+'</div><div class="hero-stat-label">'+t('wohLabel')+'</div></div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+storeCandidates.length+'</div><div class="hero-stat-label">'+t('storesLabel')+'</div></div>';
   html += '</div></div>';
 
-  html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+t('storesNote')+'</span></div><div class="podium-list">';
+  html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div><div class="podium-list">';
   storeCandidates.forEach(function(s,i){
-    var isActive=filters.s===s.key, isDim=filters.s&&!isActive, share=s.v/storeTotal;
-    html += '<button class="podium-row '+(isActive?'active':'')+' '+(isDim?'dim':'')+'" data-dim="s" data-key="'+escapeAttr(s.key)+'">';
+    var isActive=filters.s===s.key;
+    if(filters.s && !isActive) return; // se eligió una sucursal: las demás no se muestran (antes solo se atenuaban)
+    var share=s.v/storeTotal;
+    var pyS=pyStoreMap[s.key], sGrowth=(hasPy&&pyS&&pyS.v)?(s.v-pyS.v)/Math.abs(pyS.v):null;
+    html += '<button class="podium-row '+(isActive?'active':'')+'" data-dim="s" data-key="'+escapeAttr(s.key)+'">';
     html += '<span class="podium-rank">'+(i+1)+'</span>';
     html += '<div class="podium-main"><span class="podium-name">'+titleCase(s.key)+'</span>';
     html += '<div class="podium-track"><div class="podium-fill" style="width:'+(s.v/maxStoreV*100).toFixed(0)+'%"></div></div></div>';
     html += '<div class="podium-woh"><div class="podium-woh-value">'+fmtWoh(computeWoh(s.e,s.u))+'</div><div class="podium-woh-label">WOH</div></div>';
-    html += '<div class="podium-figures"><div class="podium-share">'+fmtPct(share)+'</div><div class="podium-money">'+fmtMoney(s.v)+'</div></div>';
+    html += '<div class="podium-figures"><div class="podium-share">'+fmtPct(share)+'</div><div class="podium-money">'+fmtMoney(s.v)+'</div>'+(hasPy?'<div class="podium-growth '+gClass(sGrowth)+'">'+fmtGrowth(sGrowth)+'</div>':'')+'</div>';
     html += '</button>';
   });
+  if(filters.s){
+    html += '<button class="store-back-btn" id="storeBackBtn">↺ '+t('backToAllStores')+'</button>';
+  }
   html += '</div></section>';
 
   html += '<section class="two-col"><div><div class="section-head"><span class="section-title">'+t('unTitle')+'</span></div><div class="bar-list">';
@@ -1469,6 +1531,8 @@ function render(){
   document.getElementById('clearAllBtn').addEventListener('click', function(){ filters={s:null,un:null,cat:null,gen:null}; render(); });
   document.querySelectorAll('[data-clear]').forEach(function(el){ el.addEventListener('click',function(e){ e.stopPropagation(); filters[el.getAttribute('data-clear')]=null; render(); }); });
   document.querySelectorAll('[data-dim]').forEach(function(el){ el.addEventListener('click',function(){ var dim=el.getAttribute('data-dim'), key=el.getAttribute('data-key'); filters[dim]=filters[dim]===key?null:key; render(); }); });
+  var storeBackBtn=document.getElementById('storeBackBtn');
+  if(storeBackBtn) storeBackBtn.addEventListener('click', function(){ filters.s=null; render(); });
 }
 render();
 </script>
