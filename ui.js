@@ -1342,11 +1342,15 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .bar-pct{font-family:var(--font-mono); font-size:12.5px; font-weight:600; color:var(--ink); text-align:right;}
   .two-col{display:grid; grid-template-columns:1fr 1fr; gap:36px;}
   @media (max-width:640px){ .two-col{grid-template-columns:1fr;} }
-  .fam-table{width:100%; border-collapse:collapse;}
-  .fam-table th{text-align:left; font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-soft); font-weight:500; padding:0 0 10px; border-bottom:1.5px solid var(--ink);}
+  .table-scroll{width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .fam-table{width:100%; min-width:560px; border-collapse:collapse;}
+  .fam-table th{text-align:left; font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-soft); font-weight:500; padding:0 10px 10px 0; border-bottom:1.5px solid var(--ink); white-space:nowrap;}
   .fam-table th.num, .fam-table td.num{text-align:right;}
-  .fam-table td{padding:12px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .fam-table td{padding:12px 10px 12px 0; border-bottom:1px solid var(--line); font-size:14px; white-space:nowrap;}
   .fam-table td.num{font-family:var(--font-mono);}
+  .woh-arrow{font-size:10px; margin-left:2px;}
+  .woh-down{color:var(--red);}
+  .woh-up{color:var(--green);}
   .fam-rank{color:var(--text-soft); font-family:var(--font-mono); width:24px; display:inline-block;}
   .fam-empty{padding:30px 0; text-align:center; color:var(--text-soft); font-size:13.5px;}
   footer{margin-top:60px; padding-top:20px; border-top:1px solid var(--line); font-size:12px; color:var(--text-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
@@ -1367,7 +1371,7 @@ const I18N = {
     storesNoteFiltered:'mostrando solo esta sucursal', backToAllStores:'Ver todas las sucursales',
     unTitle:'Unidad de negocio', catTitle:'Categoría', genTitle:'Género',
     famTitle:'Familias / siluetas líderes', famNote:'top 10 por venta, dentro de la selección',
-    famCol1:'Familia / Silueta', famCol2:'Unidades', famCol3:'Venta', famCol4:'% de la selección', famEmpty:'No hay datos para esta combinación.',
+    famCol1:'Familia / Silueta', famColSold:'Unid. vendidas', famColInv:'Inventario', famColWoh:'WOH', famCol3:'Venta', famCol4:'% de la selección', famEmpty:'No hay datos para esta combinación.',
     clearAll:'Ver todo', footerLeft:'Preparado con Retail Tour', footerRight:(m,a)=>'Datos de '+MESES.es[m-1].toLowerCase()+' '+a,
     vsPy:(m,a)=>'vs '+MESES.es[m-1]+' '+a, noPyData:'Sin datos del año anterior para comparar',
     insightLabel:'Observación',
@@ -1378,7 +1382,7 @@ const I18N = {
     storesNoteFiltered:'showing only this store', backToAllStores:'View all stores',
     unTitle:'Business unit', catTitle:'Category', genTitle:'Gender',
     famTitle:'Leading families / silhouettes', famNote:'top 10 by sales, within the selection',
-    famCol1:'Family / Silhouette', famCol2:'Units', famCol3:'Sales', famCol4:'% of selection', famEmpty:'No data for this combination.',
+    famCol1:'Family / Silhouette', famColSold:'Units sold', famColInv:'Inventory', famColWoh:'WOH', famCol3:'Sales', famCol4:'% of selection', famEmpty:'No data for this combination.',
     clearAll:'Show all', footerLeft:'Prepared with Retail Tour', footerRight:(m,a)=>MESES.en[m-1]+' '+a+' data',
     vsPy:(m,a)=>'vs '+MESES.en[m-1]+' '+a, noPyData:'No prior-year data to compare',
     insightLabel:'Observation',
@@ -1513,11 +1517,13 @@ function render(){
 
   html += '<section><div class="section-head"><span class="section-title">'+t('famTitle')+'</span><span class="section-note">'+t('famNote')+'</span></div>';
   if(famList.length){
-    html += '<table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num">'+t('famCol2')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famCol4')+'</th></tr></thead><tbody>';
+    html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famCol4')+'</th></tr></thead><tbody>';
     famList.forEach(function(f,i){
-      html += '<tr><td><span class="fam-rank">'+(i+1)+'</span>'+titleCase(f.key)+'</td><td class="num">'+fmtUnits(f.u)+'</td><td class="num">'+fmtMoney(f.v)+'</td><td class="num">'+fmtPct(f.v/famTotal)+'</td></tr>';
+      var fWoh=computeWoh(f.e,f.u);
+      var arrow = fWoh===null ? '' : (fWoh<20 ? '<span class="woh-arrow woh-down">▼</span>' : '<span class="woh-arrow woh-up">▲</span>');
+      html += '<tr><td><span class="fam-rank">'+(i+1)+'</span>'+titleCase(f.key)+'</td><td class="num">'+fmtUnits(f.u)+'</td><td class="num">'+fmtUnits(f.e)+'</td><td class="num">'+fmtWoh(fWoh)+' '+arrow+'</td><td class="num">'+fmtMoney(f.v)+'</td><td class="num">'+fmtPct(f.v/famTotal)+'</td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   } else {
     html += '<div class="fam-empty">'+t('famEmpty')+'</div>';
   }
