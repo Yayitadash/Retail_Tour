@@ -1380,7 +1380,7 @@ const I18N = {
   es: { eyebrow:'Retail Tour — Reporte de cuenta', periodLabel:(m,a)=>MESES.es[m-1]+' '+a, heroLabelAll:'Venta total del periodo', heroLabelFiltered:'Venta de la selección',
     unitsLabel:'Unidades vendidas', inventoryLabel:'Unidades en inventario', wohLabel:'Semanas de inventario',
     storesLabel:'Sucursales', storesTitle:'Desempeño por sucursal', storesNote:'toca una para filtrar todo lo demás',
-    storesNoteFiltered:'mostrando solo esta sucursal', backToAllStores:'Ver todas las sucursales',
+    storesNoteFiltered:'mostrando solo esta selección', backToAllStores:'Ver todas las sucursales', backToAllCats:'Ver todas las categorías',
     unTitle:'Unidad de negocio', catTitle:'Categoría', genTitle:'Género', catStatSales:'Venta', catStatGrowth:'vs año anterior',
     famTitle:'Familias / siluetas líderes', famNote:'top 10 por venta, dentro de la selección',
     famCol1:'Familia / Silueta', famColSold:'Unid. vendidas', famColInv:'Inventario', famColWoh:'WOH', famCol3:'Venta', famCol4:'% de la selección', famEmpty:'No hay datos para esta combinación.',
@@ -1391,7 +1391,7 @@ const I18N = {
   en: { eyebrow:'Retail Tour — Account report', periodLabel:(m,a)=>MESES.en[m-1]+' '+a, heroLabelAll:'Total sales for the period', heroLabelFiltered:'Sales for this selection',
     unitsLabel:'Units sold', inventoryLabel:'Units in inventory', wohLabel:'Weeks of inventory',
     storesLabel:'Stores', storesTitle:'Performance by store', storesNote:'tap one to filter everything else',
-    storesNoteFiltered:'showing only this store', backToAllStores:'View all stores',
+    storesNoteFiltered:'showing only this selection', backToAllStores:'View all stores', backToAllCats:'View all categories',
     unTitle:'Business unit', catTitle:'Category', genTitle:'Gender', catStatSales:'Sales', catStatGrowth:'vs last year',
     famTitle:'Leading families / silhouettes', famNote:'top 10 by sales, within the selection',
     famCol1:'Family / Silhouette', famColSold:'Units sold', famColInv:'Inventory', famColWoh:'WOH', famCol3:'Sales', famCol4:'% of selection', famEmpty:'No data for this combination.',
@@ -1462,11 +1462,6 @@ function render(){
   activeChips.forEach(function(c){ html += '<span class="filter-chip">'+chipLabel(c[0],c[1])+'<button data-clear="'+c[0]+'">✕</button></span>'; });
   html += '<button class="filter-clear-all" id="clearAllBtn">'+t('clearAll')+'</button></div>';
 
-  var insightText = DATA.insight && DATA.insight[LANG];
-  if(insightText){
-    html += '<div class="insight-note"><div class="insight-note-label">'+t('insightLabel')+'</div><div class="insight-note-text">'+insightText+'</div></div>';
-  }
-
   html += '<div class="hero"><div class="hero-label">'+(filtered?t('heroLabelFiltered'):t('heroLabelAll'))+'</div>';
   html += '<div class="hero-number">'+fmtMoney(totals.v)+'</div>';
   if(hasPy){
@@ -1480,6 +1475,11 @@ function render(){
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(computeWoh(totals.e,totals.u))+'</div><div class="hero-stat-label">'+t('wohLabel')+'</div></div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+storeCandidates.length+'</div><div class="hero-stat-label">'+t('storesLabel')+'</div></div>';
   html += '</div></div>';
+
+  var insightText = DATA.insight && DATA.insight[LANG];
+  if(insightText){
+    html += '<div class="insight-note"><div class="insight-note-label">'+t('insightLabel')+'</div><div class="insight-note-text">'+insightText+'</div></div>';
+  }
 
   html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div><div class="podium-list">';
   storeCandidates.forEach(function(s,i){
@@ -1518,12 +1518,14 @@ function render(){
   });
   html += '</div></div></section>';
 
-  html += '<section><div class="section-head"><span class="section-title">'+t('catTitle')+'</span></div><div class="cat-list">';
+  html += '<section><div class="section-head"><span class="section-title">'+t('catTitle')+'</span><span class="section-note">'+(filters.cat?t('storesNoteFiltered'):'')+'</span></div><div class="cat-list">';
   catCandidates.forEach(function(x){
-    var isActive=filters.cat===x.key, isDim=filters.cat&&!isActive, share=x.v/catTotal;
+    var isActive=filters.cat===x.key;
+    if(filters.cat && !isActive) return; // se eligió una categoría: las demás no se muestran (misma lógica que sucursales)
+    var share=x.v/catTotal;
     var pyX=pyCatMap[x.key], catGrowth=(hasPy&&pyX&&pyX.v)?(x.v-pyX.v)/Math.abs(pyX.v):null;
     var catWoh=computeWoh(x.e,x.u);
-    html += '<button class="cat-row '+(isActive?'active':'')+' '+(isDim?'dim':'')+'" data-dim="cat" data-key="'+escapeAttr(x.key)+'">';
+    html += '<button class="cat-row '+(isActive?'active':'')+'" data-dim="cat" data-key="'+escapeAttr(x.key)+'">';
     html += '<div class="cat-row-top"><span class="cat-label">'+x.key+'</span><span class="cat-share">'+fmtPct(share)+'</span></div>';
     html += '<div class="bar-track"><div class="bar-fill gold" style="width:'+(share*100).toFixed(0)+'%"></div></div>';
     html += '<div class="cat-row-stats">';
@@ -1532,6 +1534,9 @@ function render(){
     html += '<div class="cat-stat"><div class="cat-stat-value">'+fmtWoh(catWoh)+'</div><div class="cat-stat-label">WOH</div></div>';
     html += '</div></button>';
   });
+  if(filters.cat){
+    html += '<button class="store-back-btn" id="catBackBtn">↺ '+t('backToAllCats')+'</button>';
+  }
   html += '</div></section>';
 
   html += '<section><div class="section-head"><span class="section-title">'+t('famTitle')+'</span><span class="section-note">'+t('famNote')+'</span></div>';
@@ -1558,6 +1563,8 @@ function render(){
   document.querySelectorAll('[data-dim]').forEach(function(el){ el.addEventListener('click',function(){ var dim=el.getAttribute('data-dim'), key=el.getAttribute('data-key'); filters[dim]=filters[dim]===key?null:key; render(); }); });
   var storeBackBtn=document.getElementById('storeBackBtn');
   if(storeBackBtn) storeBackBtn.addEventListener('click', function(){ filters.s=null; render(); });
+  var catBackBtn=document.getElementById('catBackBtn');
+  if(catBackBtn) catBackBtn.addEventListener('click', function(){ filters.cat=null; render(); });
 }
 render();
 </script>
