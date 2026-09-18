@@ -1282,7 +1282,7 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   header{display:flex; justify-content:space-between; align-items:flex-start; padding:32px 0 24px; border-bottom:2px solid var(--ink); gap:16px; flex-wrap:wrap;}
   .brand{display:flex; flex-direction:column; gap:2px;}
   .brand-eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:0.06em; color:var(--gold); text-transform:uppercase;}
-  .brand-name{font-family:var(--font-display); font-weight:400; font-size:34px; color:var(--ink); line-height:0.95; text-transform:uppercase; letter-spacing:-0.01em;}
+  .brand-name{font-family:var(--font-display); font-weight:400; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
   .brand-period{font-size:14px; color:var(--text-soft); margin-top:4px;}
   .lang-btn{font-family:var(--font-mono); font-size:12px; font-weight:500; letter-spacing:0.03em; border:1.5px solid var(--ink); background:none; color:var(--ink); padding:8px 14px; border-radius:8px; cursor:pointer;}
   .lang-btn:hover{background:var(--ink); color:var(--paper);}
@@ -1293,21 +1293,21 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .filter-chip button{background:rgba(255,255,255,0.18); border:none; color:var(--paper); width:18px; height:18px; border-radius:50%; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center;}
   .filter-clear-all{font-family:var(--font-mono); font-size:11.5px; color:var(--red); background:none; border:none; cursor:pointer; text-decoration:underline; padding:5px 0;}
   .hero{padding:32px 0 8px; text-align:center;}
-  .hero-label{font-size:13px; color:var(--text-soft); margin-bottom:6px;}
-  .hero-number{font-family:var(--font-display); font-weight:400; font-size:clamp(40px,8vw,68px); color:var(--ink); line-height:1;}
-  .hero-growth{font-family:var(--font-mono); font-weight:600; font-size:14px; margin-top:8px;}
+  .hero-label{font-size:14px; color:var(--text-soft); margin-bottom:8px;}
+  .hero-number{font-family:var(--font-display); font-weight:400; font-size:clamp(56px,12vw,104px); color:var(--ink); line-height:1;}
+  .hero-growth{font-family:var(--font-mono); font-weight:600; font-size:17px; margin-top:10px;}
   .hero-growth-empty{font-family:var(--font-body); font-weight:400; font-size:12.5px; color:var(--text-soft); font-style:italic;}
-  .hero-sub{display:flex; justify-content:center; gap:28px; margin-top:18px; flex-wrap:wrap;}
+  .hero-sub{display:flex; justify-content:center; gap:36px; margin-top:26px; flex-wrap:wrap;}
   .hero-stat{text-align:center;}
-  .hero-stat-value{font-family:var(--font-mono); font-weight:500; font-size:20px; color:var(--ink);}
-  .hero-stat-label{font-size:11.5px; color:var(--text-soft); margin-top:2px;}
+  .hero-stat-value{font-family:var(--font-mono); font-weight:500; font-size:32px; color:var(--ink);}
+  .hero-stat-label{font-size:13px; color:var(--text-soft); margin-top:4px;}
   .hero-stat-growth{font-family:var(--font-mono); font-weight:600; font-size:11.5px; margin-top:3px;}
   .podium-growth{font-family:var(--font-mono); font-weight:600; font-size:11px; margin-top:2px;}
   .stat-pos{color:var(--green);}
   .stat-neg{color:var(--red);}
-  .insight-note{background:var(--paper-card); border:1.5px solid var(--gold-soft); border-left:4px solid var(--gold); border-radius:var(--radius); padding:14px 18px; margin:24px 0 0;}
-  .insight-note-label{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold); margin-bottom:5px;}
-  .insight-note-text{font-size:13.5px; line-height:1.5; color:var(--text);}
+  .insight-note{margin:22px 0 0;}
+  .insight-note-label{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold); margin-bottom:4px;}
+  .insight-note-text{font-size:14px; line-height:1.5; color:var(--text-soft); font-style:italic;}
   section{margin-top:48px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:12px;}
   .section-title{font-family:var(--font-display); font-weight:400; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
