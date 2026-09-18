@@ -1348,7 +1348,19 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .fam-table th.num, .fam-table td.num{text-align:right;}
   .fam-table td{padding:12px 10px 12px 0; border-bottom:1px solid var(--line); font-size:14px; white-space:nowrap;}
   .fam-table td.num{font-family:var(--font-mono);}
+  .fam-col-pct{font-size:11px; font-weight:400; color:var(--text-soft);}
   .woh-arrow{font-size:10px; margin-left:2px;}
+  .cat-list{display:flex; flex-direction:column; gap:10px;}
+  .cat-row{display:block; background:var(--paper-card); border:1.5px solid var(--line); border-radius:var(--radius); padding:12px 16px; cursor:pointer; font-family:inherit; color:inherit; text-align:left; width:100%;}
+  .cat-row:hover{border-color:var(--gold-soft);}
+  .cat-row.active{border-color:var(--gold); background:color-mix(in srgb, var(--gold) 6%, white);}
+  .cat-row.dim{opacity:0.4;}
+  .cat-row-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; gap:10px;}
+  .cat-label{font-family:var(--font-mono); font-size:13px; font-weight:600; color:var(--text);}
+  .cat-share{font-size:11px; font-weight:400; color:var(--text-soft); white-space:nowrap;}
+  .cat-row-stats{display:flex; gap:22px; margin-top:10px; flex-wrap:wrap;}
+  .cat-stat-value{font-family:var(--font-mono); font-size:14px; font-weight:600; color:var(--ink);}
+  .cat-stat-label{font-size:10px; color:var(--text-soft); text-transform:uppercase; letter-spacing:0.03em; margin-top:2px;}
   .woh-down{color:var(--red);}
   .woh-up{color:var(--green);}
   .fam-rank{color:var(--text-soft); font-family:var(--font-mono); width:24px; display:inline-block;}
@@ -1369,7 +1381,7 @@ const I18N = {
     unitsLabel:'Unidades vendidas', inventoryLabel:'Unidades en inventario', wohLabel:'Semanas de inventario',
     storesLabel:'Sucursales', storesTitle:'Desempeño por sucursal', storesNote:'toca una para filtrar todo lo demás',
     storesNoteFiltered:'mostrando solo esta sucursal', backToAllStores:'Ver todas las sucursales',
-    unTitle:'Unidad de negocio', catTitle:'Categoría', genTitle:'Género',
+    unTitle:'Unidad de negocio', catTitle:'Categoría', genTitle:'Género', catStatSales:'Venta', catStatGrowth:'vs año anterior',
     famTitle:'Familias / siluetas líderes', famNote:'top 10 por venta, dentro de la selección',
     famCol1:'Familia / Silueta', famColSold:'Unid. vendidas', famColInv:'Inventario', famColWoh:'WOH', famCol3:'Venta', famCol4:'% de la selección', famEmpty:'No hay datos para esta combinación.',
     clearAll:'Ver todo', footerLeft:'Preparado con Retail Tour', footerRight:(m,a)=>'Datos de '+MESES.es[m-1].toLowerCase()+' '+a,
@@ -1380,7 +1392,7 @@ const I18N = {
     unitsLabel:'Units sold', inventoryLabel:'Units in inventory', wohLabel:'Weeks of inventory',
     storesLabel:'Stores', storesTitle:'Performance by store', storesNote:'tap one to filter everything else',
     storesNoteFiltered:'showing only this store', backToAllStores:'View all stores',
-    unTitle:'Business unit', catTitle:'Category', genTitle:'Gender',
+    unTitle:'Business unit', catTitle:'Category', genTitle:'Gender', catStatSales:'Sales', catStatGrowth:'vs last year',
     famTitle:'Leading families / silhouettes', famNote:'top 10 by sales, within the selection',
     famCol1:'Family / Silhouette', famColSold:'Units sold', famColInv:'Inventory', famColWoh:'WOH', famCol3:'Sales', famCol4:'% of selection', famEmpty:'No data for this combination.',
     clearAll:'Show all', footerLeft:'Prepared with Retail Tour', footerRight:(m,a)=>MESES.en[m-1]+' '+a+' data',
@@ -1424,6 +1436,7 @@ function render(){
   var catCandidatesAll=groupBy(filterRows('cat'),'cat').sort(function(a,b){return b.v-a.v;});
   var catTotal=catCandidatesAll.reduce(function(s,x){return s+x.v;},0)||1;
   var catCandidates=catCandidatesAll.slice(0,8);
+  var pyCatMap={}; groupBy(filterRows('cat',pyRows),'cat').forEach(function(x){ pyCatMap[x.key]=x; });
   var genCandidates=groupBy(filterRows('gen'),'gen').sort(function(a,b){return b.v-a.v;});
   var genTotal=genCandidates.reduce(function(s,x){return s+x.v;},0)||1;
   var famList=groupBy(fullyFiltered,'fam').sort(function(a,b){return b.v-a.v;}).slice(0,10);
@@ -1505,23 +1518,29 @@ function render(){
   });
   html += '</div></div></section>';
 
-  html += '<section><div class="section-head"><span class="section-title">'+t('catTitle')+'</span></div><div class="bar-list">';
+  html += '<section><div class="section-head"><span class="section-title">'+t('catTitle')+'</span></div><div class="cat-list">';
   catCandidates.forEach(function(x){
     var isActive=filters.cat===x.key, isDim=filters.cat&&!isActive, share=x.v/catTotal;
-    html += '<button class="bar-row '+(isActive?'active':'')+' '+(isDim?'dim':'')+'" data-dim="cat" data-key="'+escapeAttr(x.key)+'">';
-    html += '<span class="bar-label">'+x.key+'</span>';
+    var pyX=pyCatMap[x.key], catGrowth=(hasPy&&pyX&&pyX.v)?(x.v-pyX.v)/Math.abs(pyX.v):null;
+    var catWoh=computeWoh(x.e,x.u);
+    html += '<button class="cat-row '+(isActive?'active':'')+' '+(isDim?'dim':'')+'" data-dim="cat" data-key="'+escapeAttr(x.key)+'">';
+    html += '<div class="cat-row-top"><span class="cat-label">'+x.key+'</span><span class="cat-share">'+fmtPct(share)+'</span></div>';
     html += '<div class="bar-track"><div class="bar-fill gold" style="width:'+(share*100).toFixed(0)+'%"></div></div>';
-    html += '<span class="bar-pct">'+fmtPct(share)+'</span></button>';
+    html += '<div class="cat-row-stats">';
+    html += '<div class="cat-stat"><div class="cat-stat-value">'+fmtMoney(x.v)+'</div><div class="cat-stat-label">'+t('catStatSales')+'</div></div>';
+    html += '<div class="cat-stat"><div class="cat-stat-value '+(hasPy?gClass(catGrowth):'')+'">'+(hasPy?fmtGrowth(catGrowth):'—')+'</div><div class="cat-stat-label">'+t('catStatGrowth')+'</div></div>';
+    html += '<div class="cat-stat"><div class="cat-stat-value">'+fmtWoh(catWoh)+'</div><div class="cat-stat-label">WOH</div></div>';
+    html += '</div></button>';
   });
   html += '</div></section>';
 
   html += '<section><div class="section-head"><span class="section-title">'+t('famTitle')+'</span><span class="section-note">'+t('famNote')+'</span></div>';
   if(famList.length){
-    html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famCol4')+'</th></tr></thead><tbody>';
+    html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num fam-col-pct">'+t('famCol4')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th></tr></thead><tbody>';
     famList.forEach(function(f,i){
       var fWoh=computeWoh(f.e,f.u);
       var arrow = fWoh===null ? '' : (fWoh<20 ? '<span class="woh-arrow woh-down">▼</span>' : '<span class="woh-arrow woh-up">▲</span>');
-      html += '<tr><td><span class="fam-rank">'+(i+1)+'</span>'+titleCase(f.key)+'</td><td class="num">'+fmtUnits(f.u)+'</td><td class="num">'+fmtUnits(f.e)+'</td><td class="num">'+fmtWoh(fWoh)+' '+arrow+'</td><td class="num">'+fmtMoney(f.v)+'</td><td class="num">'+fmtPct(f.v/famTotal)+'</td></tr>';
+      html += '<tr><td><span class="fam-rank">'+(i+1)+'</span>'+titleCase(f.key)+'</td><td class="num fam-col-pct">'+fmtPct(f.v/famTotal)+'</td><td class="num">'+fmtUnits(f.u)+'</td><td class="num">'+fmtMoney(f.v)+'</td><td class="num">'+fmtUnits(f.e)+'</td><td class="num">'+fmtWoh(fWoh)+' '+arrow+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else {
