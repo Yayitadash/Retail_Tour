@@ -1249,14 +1249,27 @@ function downloadAccountReport(cliente, periodo) {
   const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn });
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
-  a.href = url;
-  a.download = `${safeCliente}_${periodoLabelI18n(periodo, 'es').replace(/\s+/g, '')}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+  // En celular (sobre todo iOS/Safari), forzar la descarga de un .html con el
+  // atributo `download` hace que el teléfono lo trate como un documento
+  // genérico para compartir en vez de abrirlo como página — nunca se ve el
+  // reporte de verdad. Ahí, en lugar de descargarlo, lo abrimos directo en
+  // una pestaña nueva para que se vea y funcione igual que en computadora.
+  // En computadora sí conviene el archivo descargado (para adjuntarlo a un
+  // correo, por ejemplo), así que ese flujo no cambia.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    window.open(url, '_blank');
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeCliente}_${periodoLabelI18n(periodo, 'es').replace(/\s+/g, '')}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 }
 
 
