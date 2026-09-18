@@ -1333,14 +1333,15 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight) {
   .podium-rank{font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--gold); text-align:center;}
   .podium-main{display:flex; flex-direction:column; gap:5px; min-width:0;}
   .podium-name{font-weight:600; font-size:14px; color:var(--ink);}
-  .podium-track{background:var(--paper); border-radius:6px; height:7px; overflow:hidden;}
+  .podium-track-row{display:flex; align-items:center; gap:7px;}
+  .podium-track{flex:1; background:var(--paper); border-radius:6px; height:7px; overflow:hidden;}
   .podium-fill{background:var(--gold); height:100%; border-radius:6px;}
+  .podium-share-inline{font-family:var(--font-mono); font-weight:700; font-size:11px; color:var(--gold); white-space:nowrap;}
   .podium-woh{text-align:center; white-space:nowrap;}
   .podium-woh-value{font-family:var(--font-mono); font-weight:600; font-size:14px; color:var(--steel);}
   .podium-woh-label{font-family:var(--font-mono); font-size:8.5px; color:var(--text-soft); letter-spacing:0.04em;}
   .podium-figures{text-align:right; white-space:nowrap;}
-  .podium-share{font-family:var(--font-mono); font-weight:600; font-size:16px; color:var(--ink);}
-  .podium-money{font-size:11px; color:var(--text-soft); margin-top:2px;}
+  .podium-money{font-family:var(--font-mono); font-weight:700; font-size:21px; color:var(--ink);}
   .bar-list{display:flex; flex-direction:column; gap:10px;}
   .bar-row{display:grid; grid-template-columns:100px 1fr 48px; align-items:center; gap:12px; background:none; border:1.5px solid transparent; border-radius:9px; padding:5px 8px; cursor:pointer; font-family:inherit; color:inherit; text-align:left; width:100%;}
   .bar-row:hover{border-color:var(--line);}
@@ -1413,6 +1414,7 @@ const I18N = {
 };
 function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2]):v; }
 function fmtMoney(v){ return '$'+Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
+function fmtMoneyShort(v){ if(v===null||v===undefined) return '—'; var abs=Math.abs(v); var sign=v<0?'-':''; if(abs>=1000000) return sign+'$'+(abs/1000000).toFixed(abs%1000000===0?0:1)+'M'; if(abs>=1000) return sign+'$'+Math.round(abs/1000)+'K'; return sign+'$'+Math.round(abs); }
 function fmtUnits(v){ return Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
 function fmtPct(v){ return (v*100).toFixed(1)+'%'; }
 function fmtGrowth(v){ if(v===null||v===undefined) return '—'; var pct=(v*100).toFixed(0); return (v>=0?'+':'')+pct+'%'; }
@@ -1510,9 +1512,9 @@ function render(){
     html += '<button class="podium-row '+(isActive?'active':'')+'" data-dim="s" data-key="'+escapeAttr(s.key)+'">';
     html += '<span class="podium-rank">'+(i+1)+'</span>';
     html += '<div class="podium-main"><span class="podium-name">'+titleCase(s.key)+'</span>';
-    html += '<div class="podium-track"><div class="podium-fill" style="width:'+(s.v/maxStoreV*100).toFixed(0)+'%"></div></div></div>';
+    html += '<div class="podium-track-row"><div class="podium-track"><div class="podium-fill" style="width:'+(s.v/maxStoreV*100).toFixed(0)+'%"></div></div><span class="podium-share-inline">'+Math.round(share*100)+'%</span></div></div>';
     html += '<div class="podium-woh"><div class="podium-woh-value">'+fmtWoh(computeWoh(s.e,s.u))+'</div><div class="podium-woh-label">WOH</div></div>';
-    html += '<div class="podium-figures"><div class="podium-share">'+fmtPct(share)+'</div><div class="podium-money">'+fmtMoney(s.v)+'</div>'+(hasPy?'<div class="podium-growth '+gClass(sGrowth)+'">'+fmtGrowth(sGrowth)+'</div>':'')+'</div>';
+    html += '<div class="podium-figures"><div class="podium-money">'+fmtMoneyShort(s.v)+'</div>'+(hasPy?'<div class="podium-growth '+gClass(sGrowth)+'">'+fmtGrowth(sGrowth)+'</div>':'')+'</div>';
     html += '</button>';
   });
   if(filters.s){
