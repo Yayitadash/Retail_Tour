@@ -1412,6 +1412,16 @@ const I18N = {
     clearAll:'Ver todo', footerLeft:'Preparado con Retail Tour', footerRight:(m,a)=>'Datos de '+MESES.es[m-1].toLowerCase()+' '+a,
     vsPy:(m,a)=>'vs '+MESES.es[m-1]+' '+a, noPyData:'Sin datos del año anterior para comparar',
     insightLabel:'Observación', noChange:'No hay cambios',
+    insightGeneralLabel:'Observación', insightStoresLabel:'Sucursales', insightCatLabel:'Categorías', insightFamLabel:'Inventario',
+    nounStore:'sucursal', nounCat:'categoría', nounFam:'producto',
+    insightGeneralNeutral:'La cuenta no muestra señales de riesgo relevantes en este periodo.',
+    insightStoresNeutral:'La cobertura de inventario entre sucursales se ve equilibrada, sin señales de riesgo relevantes.',
+    insightCatNeutral:'La cobertura de inventario entre categorías se ve equilibrada, sin señales de riesgo relevantes.',
+    insightFamNeutral:'La cobertura de inventario en las familias líderes se ve saludable, sin señales de desabasto ni sobre-stock relevantes.',
+    insightRobustas:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta), pero ya acumula '+woh+' semanas de inventario. Vale la pena revisar el mix ahí antes de seguir reabasteciendo.',
+    insightDesabastecidas:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta), pero su inventario apenas alcanza '+woh+' semanas. Ahí puede haber ventas quedándose sobre la mesa por falta de stock.',
+    insightEstrellas:(label,noun,woh)=>label+' es tu '+noun+' más fuerte este mes, pero su inventario ya bajó a '+woh+' semanas. Vale la pena asegurar reabastecimiento para no perder ese impulso.',
+    insightAceleradas:(label,woh)=>label+' está entre lo más vendido y su inventario ya bajó a solo '+woh+' semanas. Con el ritmo de crecimiento, vale la pena anticiparse antes de quedarte sin stock.',
     un:{FW:'Calzado',APP:'Ropa',EQ:'Equipo',LIC:'Licencias'}, gen:{MEN:'Hombre',WOMEN:'Mujer',KIDS:'Niños'} },
   en: { eyebrow:'Retail Tour — Monthly Report', periodLabel:(m,a)=>MESES.en[m-1]+' '+a, heroLabelAll:'Total sales for the period', heroLabelFiltered:'Sales for this selection',
     unitsLabel:'Units sold', inventoryLabel:'Units in inventory', wohLabel:'Weeks of inventory',
@@ -1423,9 +1433,19 @@ const I18N = {
     clearAll:'Show all', footerLeft:'Prepared with Retail Tour', footerRight:(m,a)=>MESES.en[m-1]+' '+a+' data',
     vsPy:(m,a)=>'vs '+MESES.en[m-1]+' '+a, noPyData:'No prior-year data to compare',
     insightLabel:'Observation', noChange:'No Change',
+    insightGeneralLabel:'Observation', insightStoresLabel:'Stores', insightCatLabel:'Categories', insightFamLabel:'Inventory',
+    nounStore:'store', nounCat:'category', nounFam:'product',
+    insightGeneralNeutral:'The account shows no notable risk signals this period.',
+    insightStoresNeutral:'Inventory coverage across stores looks balanced, with no notable risk signals.',
+    insightCatNeutral:'Inventory coverage across categories looks balanced, with no notable risk signals.',
+    insightFamNeutral:'Inventory coverage across the leading families looks healthy, with no notable stockout or overstock signals.',
+    insightRobustas:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales), but it is already carrying '+woh+' weeks of inventory. Worth reviewing the mix there before restocking further.',
+    insightDesabastecidas:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales), but its inventory only covers about '+woh+' weeks. There may be sales left on the table here due to low stock.',
+    insightEstrellas:(label,noun,woh)=>label+' is your top '+noun+' this month, but its inventory already dropped to '+woh+' weeks. Worth securing restock so as not to lose that momentum.',
+    insightAceleradas:(label,woh)=>label+' is among your best sellers and its inventory already dropped to just '+woh+' weeks. Given the growth pace, it is worth getting ahead of a potential stockout.',
     un:{FW:'Footwear',APP:'Apparel',EQ:'Equipment',LIC:'Licensed'}, gen:{MEN:'Men',WOMEN:'Women',KIDS:'Kids'} }
 };
-function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2]):v; }
+function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2],arguments[3],arguments[4]):v; }
 function fmtMoney(v){ return '$'+Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
 function fmtMoneyShort(v){ if(v===null||v===undefined) return '—'; var abs=Math.abs(v); var sign=v<0?'-':''; if(abs>=1000000) return sign+'$'+(abs/1000000).toFixed(abs%1000000===0?0:1)+'M'; if(abs>=1000) return sign+'$'+Math.round(abs/1000)+'K'; return sign+'$'+Math.round(abs); }
 function fmtUnits(v){ return Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
@@ -1437,6 +1457,23 @@ function fmtUnitDiff(cur,py){ if(cur===null||cur===undefined||py===null||py===un
 function fmtPtsDiff(cur,py){ if(cur===null||cur===undefined||py===null||py===undefined) return null; var diff=cur-py; if(Math.abs(diff)<0.05) return t('noChange'); return (diff>0?'+':'')+diff.toFixed(1)+' pts'; }
 function diffClass(cur,py){ if(cur===null||cur===undefined||py===null||py===undefined) return ''; var diff=cur-py; if(Math.abs(diff)<0.0001) return ''; return diff>0?'stat-pos':'stat-neg'; }
 function fmtWoh(v){ return v===null ? '—' : v.toFixed(1); }
+var HEALTHY_LOW=20, HEALTHY_HIGH=26;
+function bestByScore(pool,scoreFn,minShare){
+  var filtered=pool.filter(function(c){ return (!minShare||c.share>=minShare) && scoreFn(c)>0; });
+  if(!filtered.length) return null;
+  return filtered.reduce(function(a,b){ return scoreFn(a)>=scoreFn(b)?a:b; });
+}
+function sectionInsight(pool,noun,minShare,neutralKey){
+  var clean=pool.filter(function(c){ return c.woh!==null && c.woh!==undefined && c.share>0; });
+  if(!clean.length) return t(neutralKey);
+  var over=bestByScore(clean,function(c){return c.share*(c.woh-HEALTHY_HIGH);},minShare);
+  var over_s=over?over.share*(over.woh-HEALTHY_HIGH):0;
+  var under=bestByScore(clean,function(c){return c.share*(HEALTHY_LOW-c.woh);},minShare);
+  var under_s=under?under.share*(HEALTHY_LOW-under.woh):0;
+  if(!over && !under) return t(neutralKey);
+  if(under && under_s>=over_s) return t('insightDesabastecidas',under.label,noun,Math.round(under.share*100),under.woh.toFixed(1));
+  return t('insightRobustas',over.label,noun,Math.round(over.share*100),over.woh.toFixed(1));
+}
 function titleCase(s){ if(!s) return s; var lower=String(s).toLowerCase(); var out=''; for(var i=0;i<lower.length;i++){ var prev = i===0 ? ' ' : lower.charAt(i-1); var isSep = (prev===' '||prev==='/'||prev==='#'); out += isSep ? lower.charAt(i).toUpperCase() : lower.charAt(i); } return out; }
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 function matchesFilters(row,f,exclude){ var dims=['s','un','cat','gen']; for(var i=0;i<dims.length;i++){ var k=dims[i]; if(k===exclude) continue; if(f[k] && row[k]!==f[k]) return false; } return true; }
@@ -1504,17 +1541,20 @@ function render(){
   html += '<div class="hero-sub">';
   var invDiff=hasPy?fmtUnitDiff(totals.e,pyTotals.e):null;
   var wohDiff=hasPy?fmtPtsDiff(curWoh,pyWoh):null;
-  var storesDiff=hasPy?fmtUnitDiff(storeCandidates.length,pyStoreCount):null;
+  // Cuando hay una sucursal puntual seleccionada, el conteo de "Sucursales"
+  // debe reflejar eso (1), no el total de sucursales que aplican a los
+  // demás filtros activos (que es lo que mide storeCandidates.length).
+  var heroStoreCount = filters.s ? 1 : storeCandidates.length;
+  var heroPyStoreCount = hasPy ? (filters.s ? (pyStoreMap[filters.s] ? 1 : 0) : pyStoreCount) : null;
+  var storesDiff=hasPy?fmtUnitDiff(heroStoreCount,heroPyStoreCount):null;
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(totals.u)+'</div><div class="hero-stat-label">'+t('unitsLabel')+'</div>'+(hasPy?'<div class="hero-stat-growth '+gClass(growthUnits)+'">'+fmtGrowth(growthUnits)+'</div>':'')+'</div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(totals.e)+'</div><div class="hero-stat-label">'+t('inventoryLabel')+'</div>'+(invDiff?'<div class="hero-stat-growth '+diffClass(totals.e,pyTotals.e)+'">'+invDiff+'</div>':'')+'</div>';
   html += '<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(curWoh)+'</div><div class="hero-stat-label">'+t('wohLabel')+'</div>'+(wohDiff?'<div class="hero-stat-growth '+diffClass(curWoh,pyWoh)+'">'+wohDiff+'</div>':'')+'</div>';
-  html += '<div class="hero-stat"><div class="hero-stat-value">'+storeCandidates.length+'</div><div class="hero-stat-label">'+t('storesLabel')+'</div>'+(storesDiff?'<div class="hero-stat-growth '+diffClass(storeCandidates.length,pyStoreCount)+'">'+storesDiff+'</div>':'')+'</div>';
+  html += '<div class="hero-stat"><div class="hero-stat-value">'+heroStoreCount+'</div><div class="hero-stat-label">'+t('storesLabel')+'</div>'+(storesDiff?'<div class="hero-stat-growth '+diffClass(heroStoreCount,heroPyStoreCount)+'">'+storesDiff+'</div>':'')+'</div>';
   html += '</div></div>';
 
-  var insightText = DATA.insight && DATA.insight[LANG];
-  if(insightText){
-    html += '<div class="insight-note"><div class="insight-note-label">'+t('insightLabel')+'</div><div class="insight-note-text">'+insightText+'</div></div>';
-  }
+  var insightText = (DATA.insight && DATA.insight[LANG]) || t('insightGeneralNeutral');
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightGeneralLabel')+'</div><div class="insight-note-text">'+insightText+'</div></div>';
 
   html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div><div class="podium-list">';
   storeCandidates.forEach(function(s,i){
@@ -1534,6 +1574,9 @@ function render(){
     html += '<button class="store-back-btn" id="storeBackBtn">↺ '+t('backToAllStores')+'</button>';
   }
   html += '</div></section>';
+
+  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:computeWoh(s.e,s.u) }; });
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightStoresLabel')+'</div><div class="insight-note-text">'+sectionInsight(storesPool,t('nounStore'),0.15,'insightStoresNeutral')+'</div></div>';
 
   html += '<section class="two-col"><div><div class="section-head"><span class="section-title">'+t('unTitle')+'</span></div><div class="bar-list">';
   unCandidates.forEach(function(x){
@@ -1574,6 +1617,9 @@ function render(){
   }
   html += '</div></section>';
 
+  var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:computeWoh(x.e,x.u) }; });
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightCatLabel')+'</div><div class="insight-note-text">'+sectionInsight(catPool,t('nounCat'),0.15,'insightCatNeutral')+'</div></div>';
+
   html += '<section><div class="section-head"><span class="section-title">'+t('famTitle')+'</span><span class="section-note">'+t('famNote')+'</span></div>';
   if(famList.length){
     html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num fam-col-pct">'+t('famCol4')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th></tr></thead><tbody>';
@@ -1587,6 +1633,9 @@ function render(){
     html += '<div class="fam-empty">'+t('famEmpty')+'</div>';
   }
   html += '</section>';
+
+  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:computeWoh(f.e,f.u) }; });
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightFamLabel')+'</div><div class="insight-note-text">'+sectionInsight(famPool,t('nounFam'),0,'insightFamNeutral')+'</div></div>';
 
   html += '<footer><span>'+t('footerLeft')+'</span><span>'+t('footerRight',DATA.periodo.mes,DATA.periodo.anio)+'</span></footer>';
 
