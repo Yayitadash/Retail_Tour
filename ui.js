@@ -1230,22 +1230,41 @@ function downloadAccountReport(cliente, periodo) {
   const pyRows = getClientCubeRowsWithStore(cliente, pyPeriodo);
   const anio = Math.floor(periodo / 100), mes = periodo % 100;
 
-  // Comentario/hallazgo automático (mismo motor que usa la app), generado en
-  // ambos idiomas de una vez para que el reporte descargado pueda cambiar de
-  // idioma sin depender de la app. Sin ninguna referencia a "Yaya": este
-  // documento puede terminar en manos del cliente, así que el texto va en
-  // tono de análisis neutral, no de asistente.
+  // Comentario general del reporte: describe cómo cerró la cuenta en cuanto
+  // a su clasificación (venta/inventario) ese mes, reusando los mismos
+  // textos de clasifDesc() que ya usa la app — sin nombrar la clasificación,
+  // solo con su ícono. Se arma en ambos idiomas de una vez para que el
+  // reporte descargado pueda cambiar de idioma sin depender de la app. Sin
+  // ninguna referencia a "Yaya": este documento puede terminar en manos del
+  // cliente, así que el texto va en tono de análisis neutral, no de asistente.
   const cd = state.clientePeriodo[cliente];
   const metrics = cd ? computeMetricsForPeriod(cd.hist, periodo) : null;
   const clasif = metrics ? metrics.clasif : null;
-  const savedLang = state.lang;
-  let insightEs = null, insightEn = null;
-  if (clasif) {
-    state.lang = 'es'; insightEs = findAccountInsight(cliente, periodo, clasif);
-    state.lang = 'en'; insightEn = findAccountInsight(cliente, periodo, clasif);
-  }
-  state.lang = savedLang;
+  const fullHist = cd ? computeFullHistory(cd.hist) : [];
+  const streak = clasif ? detectStreak(fullHist, periodo) : null;
 
+  function buildClasifNarrative(lang) {
+    if (!clasif) return null;
+    const desc = classifDesc(clasif, lang);
+    let sentence = (lang === 'es' ? 'La cuenta tuvo ' : 'The account had ') + desc;
+    if (streak && streak.changedFrom) {
+      const n = streak.changedFrom.meses;
+      const prevDesc = classifDesc(streak.changedFrom.clasif, lang);
+      if (lang === 'es') {
+        sentence += ' Cambió este mes, tras ' + n + (n === 1 ? ' mes' : ' meses') + ': ' + prevDesc;
+      } else {
+        sentence += ' It changed this month, after ' + n + (n === 1 ? ' month' : ' months') + ': ' + prevDesc;
+      }
+    } else if (streak && streak.meses > 1) {
+      sentence += lang === 'es'
+        ? ' Lleva ' + streak.meses + ' meses consecutivos con este comportamiento.'
+        : ' It has kept this pattern for ' + streak.meses + ' straight months.';
+    }
+    return sentence;
+  }
+
+  const insightEs = buildClasifNarrative('es');
+  const insightEn = buildClasifNarrative('en');
   const clasifIcon = clasif && CLASIFICACIONES[clasif] ? CLASIFICACIONES[clasif].icon : '📊';
 
   const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon });
@@ -1415,9 +1434,13 @@ const I18N = {
     clearAll:'Ver todo', footerLeft:'Preparado con Retail Tour', footerRight:(m,a)=>'Datos de '+MESES.es[m-1].toLowerCase()+' '+a,
     vsPy:(m,a)=>'vs '+MESES.es[m-1]+' '+a, noPyData:'Sin datos del año anterior para comparar',
     insightLabel:'Observación', noChange:'No hay cambios',
-    insightGeneralLabel:'Observación', insightStoresLabel:'Sucursales', insightCatLabel:'Categorías', insightFamLabel:'Inventario',
+    insightGeneralLabel:'Observación', insightStoresLabel:'Sucursales', insightCatLabel:'Categorías', insightFamLabel:'Inventario', insightUnGenLabel:'BU y Género',
     nounStore:'sucursal', nounCat:'categoría', nounFam:'producto',
     insightGeneralNeutral:'La cuenta no muestra señales de riesgo relevantes en este periodo.',
+    insightUnGenNeutral:'No hay suficientes datos de unidad de negocio o género en esta selección.',
+    insightGrowthSuffix:(g)=>' Cambió '+g+' frente al año anterior.',
+    insightUnGenSelected:(name,sharePct,woh,growthSuffix)=>name+' representa el '+sharePct+'% de la venta seleccionada, con '+woh+' semanas de inventario.'+growthSuffix,
+    insightUnTop:(name,sharePct,woh,growthSuffix)=>name+' es tu unidad de negocio más fuerte este periodo, con '+sharePct+'% de la venta y '+woh+' semanas de inventario.'+growthSuffix,
     insightStoresNeutral:'La cobertura de inventario entre sucursales se ve equilibrada, sin señales de riesgo relevantes.',
     insightCatNeutral:'La cobertura de inventario entre categorías se ve equilibrada, sin señales de riesgo relevantes.',
     insightFamNeutral:'La cobertura de inventario en las familias líderes se ve saludable, sin señales de desabasto ni sobre-stock relevantes.',
@@ -1436,9 +1459,13 @@ const I18N = {
     clearAll:'Show all', footerLeft:'Prepared with Retail Tour', footerRight:(m,a)=>MESES.en[m-1]+' '+a+' data',
     vsPy:(m,a)=>'vs '+MESES.en[m-1]+' '+a, noPyData:'No prior-year data to compare',
     insightLabel:'Observation', noChange:'No Change',
-    insightGeneralLabel:'Observation', insightStoresLabel:'Stores', insightCatLabel:'Categories', insightFamLabel:'Inventory',
+    insightGeneralLabel:'Observation', insightStoresLabel:'Stores', insightCatLabel:'Categories', insightFamLabel:'Inventory', insightUnGenLabel:'BU & Gender',
     nounStore:'store', nounCat:'category', nounFam:'product',
     insightGeneralNeutral:'The account shows no notable risk signals this period.',
+    insightUnGenNeutral:'Not enough business-unit or gender data in this selection.',
+    insightGrowthSuffix:(g)=>' It changed '+g+' vs last year.',
+    insightUnGenSelected:(name,sharePct,woh,growthSuffix)=>name+' accounts for '+sharePct+'% of the selected sales, with '+woh+' weeks of inventory.'+growthSuffix,
+    insightUnTop:(name,sharePct,woh,growthSuffix)=>name+' is your strongest business unit this period, with '+sharePct+'% of sales and '+woh+' weeks of inventory.'+growthSuffix,
     insightStoresNeutral:'Inventory coverage across stores looks balanced, with no notable risk signals.',
     insightCatNeutral:'Inventory coverage across categories looks balanced, with no notable risk signals.',
     insightFamNeutral:'Inventory coverage across the leading families looks healthy, with no notable stockout or overstock signals.',
@@ -1505,17 +1532,50 @@ function render(){
   var pyStoreCount=hasPy?Object.keys(pyStoreMap).length:null;
   var unCandidates=groupBy(filterRows('un'),'un').sort(function(a,b){return b.v-a.v;});
   var unTotal=unCandidates.reduce(function(s,x){return s+x.v;},0)||1;
+  var pyUnMap={}; groupBy(filterRows('un',pyRows),'un').forEach(function(x){ pyUnMap[x.key]=x; });
   var catCandidatesAll=groupBy(filterRows('cat'),'cat').sort(function(a,b){return b.v-a.v;});
   var catTotal=catCandidatesAll.reduce(function(s,x){return s+x.v;},0)||1;
   var catCandidates=catCandidatesAll.slice(0,8);
   var pyCatMap={}; groupBy(filterRows('cat',pyRows),'cat').forEach(function(x){ pyCatMap[x.key]=x; });
   var genCandidates=groupBy(filterRows('gen'),'gen').sort(function(a,b){return b.v-a.v;});
   var genTotal=genCandidates.reduce(function(s,x){return s+x.v;},0)||1;
+  var pyGenMap={}; groupBy(filterRows('gen',pyRows),'gen').forEach(function(x){ pyGenMap[x.key]=x; });
   var famList=groupBy(fullyFiltered,'fam').sort(function(a,b){return b.v-a.v;}).slice(0,10);
   var famTotal=totals.v||1;
   var maxStoreV=Math.max.apply(null,storeCandidates.map(function(s){return s.v;}).concat([1]));
+  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:computeWoh(s.e,s.u) }; });
+  var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:computeWoh(x.e,x.u) }; });
+  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:computeWoh(f.e,f.u) }; });
 
   function chipLabel(dim,key){ if(dim==='un') return I18N[LANG].un[key]||key; if(dim==='gen') return I18N[LANG].gen[key]||key; if(dim==='s') return titleCase(key); return key; }
+
+  // Comentario de la sección Unidad de Negocio / Género: si hay una UN o un
+  // Género puntual seleccionado, habla de ese; si no hay ningún filtro
+  // activo, habla de la unidad de negocio que más vendió.
+  function unGenInsight(){
+    function growthSuffix(cur,py){
+      if(!hasPy || !py || !py.v) return '';
+      var g=(cur.v-py.v)/Math.abs(py.v);
+      return t('insightGrowthSuffix', fmtGrowth(g));
+    }
+    if(filters.un){
+      var x=unCandidates.filter(function(c){return c.key===filters.un;})[0];
+      if(!x) return t('insightUnGenNeutral');
+      var share=x.v/unTotal;
+      return t('insightUnGenSelected', (I18N[LANG].un[x.key]||x.key), Math.round(share*100), fmtWoh(computeWoh(x.e,x.u)), growthSuffix(x,pyUnMap[x.key]));
+    }
+    if(filters.gen){
+      var gx=genCandidates.filter(function(c){return c.key===filters.gen;})[0];
+      if(!gx) return t('insightUnGenNeutral');
+      var shareG=gx.v/genTotal;
+      return t('insightUnGenSelected', (I18N[LANG].gen[gx.key]||gx.key), Math.round(shareG*100), fmtWoh(computeWoh(gx.e,gx.u)), growthSuffix(gx,pyGenMap[gx.key]));
+    }
+    var top=unCandidates[0];
+    if(!top) return t('insightUnGenNeutral');
+    var shareTop=top.v/unTotal;
+    return t('insightUnTop', (I18N[LANG].un[top.key]||top.key), Math.round(shareTop*100), fmtWoh(computeWoh(top.e,top.u)), growthSuffix(top,pyUnMap[top.key]));
+  }
+
   var activeChips=[];
   if(filters.s) activeChips.push(['s',filters.s]);
   if(filters.un) activeChips.push(['un',filters.un]);
@@ -1556,13 +1616,16 @@ function render(){
   html += '<div class="hero-stat"><div class="hero-stat-value">'+heroStoreCount+'</div><div class="hero-stat-label">'+t('storesLabel')+'</div>'+(storesDiff?'<div class="hero-stat-growth '+diffClass(heroStoreCount,heroPyStoreCount)+'">'+storesDiff+'</div>':'')+'</div>';
   html += '</div></div>';
 
-  // El comentario general (habla de la clasificación de la cuenta en el mes)
-  // se calcula aquí pero se imprime más abajo, después de BU/Género, porque
-  // su contenido suele estar enfocado justo en esas dimensiones.
+  // Comentario general: describe cómo cerró la cuenta en cuanto a su
+  // clasificación (venta/inventario) durante el mes, sin nombrar la
+  // clasificación — solo el ícono. Va justo debajo de los primeros KPIs.
   var insightText = (DATA.insight && DATA.insight[LANG]) || t('insightGeneralNeutral');
   var insightIcon = (DATA.insight && DATA.insight.icon) || '📊';
+  html += '<div class="insight-note"><div class="insight-note-label insight-note-icon">'+insightIcon+'</div><div class="insight-note-text">'+insightText+'</div></div>';
 
-  html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div><div class="podium-list">';
+  html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div>';
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightStoresLabel')+'</div><div class="insight-note-text">'+sectionInsight(storesPool,t('nounStore'),0.15,'insightStoresNeutral')+'</div></div>';
+  html += '<div class="podium-list">';
   storeCandidates.forEach(function(s,i){
     var isActive=filters.s===s.key;
     if(filters.s && !isActive) return; // se eligió una sucursal: las demás no se muestran (antes solo se atenuaban)
@@ -1580,11 +1643,6 @@ function render(){
     html += '<button class="store-back-btn" id="storeBackBtn">↺ '+t('backToAllStores')+'</button>';
   }
   html += '</div></section>';
-
-  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:computeWoh(s.e,s.u) }; });
-  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightStoresLabel')+'</div><div class="insight-note-text">'+sectionInsight(storesPool,t('nounStore'),0.15,'insightStoresNeutral')+'</div></div>';
-  var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:computeWoh(x.e,x.u) }; });
-  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:computeWoh(f.e,f.u) }; });
 
   html += '<section class="two-col"><div><div class="section-head"><span class="section-title">'+t('unTitle')+'</span></div><div class="bar-list">';
   unCandidates.forEach(function(x){
@@ -1604,7 +1662,7 @@ function render(){
   });
   html += '</div></div></section>';
 
-  html += '<div class="insight-note"><div class="insight-note-label insight-note-icon">'+insightIcon+'</div><div class="insight-note-text">'+insightText+'</div></div>';
+  html += '<div class="insight-note"><div class="insight-note-label">'+t('insightUnGenLabel')+'</div><div class="insight-note-text">'+unGenInsight()+'</div></div>';
 
   html += '<section><div class="section-head"><span class="section-title">'+t('catTitle')+'</span><span class="section-note">'+(filters.cat?t('storesNoteFiltered'):'')+'</span></div>';
   html += '<div class="insight-note"><div class="insight-note-label">'+t('insightCatLabel')+'</div><div class="insight-note-text">'+sectionInsight(catPool,t('nounCat'),0.15,'insightCatNeutral')+'</div></div>';
