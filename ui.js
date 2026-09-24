@@ -1330,7 +1330,8 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight, lang)
   .brand-name{font-family:var(--font-display); font-weight:800; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
   .brand-period{font-size:14px; color:var(--text-soft); margin-top:4px;}
   .lang-switch{display:flex; gap:6px;}
-  .lang-flag-btn{font-size:20px; line-height:1; border:1.5px solid var(--line); background:var(--paper-card); padding:6px 9px; border-radius:8px; cursor:pointer; opacity:0.4; filter:grayscale(60%); transition:opacity .15s, filter .15s, border-color .15s;}
+  .lang-flag-btn{display:flex; border:1.5px solid var(--line); background:var(--paper-card); padding:5px; border-radius:8px; cursor:pointer; opacity:0.4; filter:grayscale(60%); transition:opacity .15s, filter .15s, border-color .15s;}
+  .lang-flag-btn svg{display:block; width:22px; height:16px; border-radius:2px;}
   .lang-flag-btn:hover{opacity:0.85;}
   .lang-flag-btn.active{opacity:1; filter:none; border-color:var(--ink);}
   .filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--line); min-height:20px;}
@@ -1589,9 +1590,11 @@ function render(){
   html += '<span class="brand-eyebrow">'+t('eyebrow')+'</span>';
   html += '<span class="brand-name">'+titleCase(DATA.cliente)+'</span>';
   html += '<span class="brand-period">'+t('periodLabel',DATA.periodo.mes,DATA.periodo.anio)+'</span>';
+  var flagEs = '<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#AA151B"/><rect y="5" width="30" height="10" fill="#F1BF00"/></svg>';
+  var flagUs = '<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#FFFFFF"/><rect width="30" height="1.54" fill="#B22234"/><rect y="3.08" width="30" height="1.54" fill="#B22234"/><rect y="6.16" width="30" height="1.54" fill="#B22234"/><rect y="9.24" width="30" height="1.54" fill="#B22234"/><rect y="12.32" width="30" height="1.54" fill="#B22234"/><rect y="15.4" width="30" height="1.54" fill="#B22234"/><rect y="18.46" width="30" height="1.54" fill="#B22234"/><rect width="12" height="10.8" fill="#3C3B6E"/></svg>';
   html += '</div><div class="lang-switch">';
-  html += '<button class="lang-flag-btn '+(LANG==='es'?'active':'')+'" data-lang="es" title="Español" aria-label="Español">🇪🇸</button>';
-  html += '<button class="lang-flag-btn '+(LANG==='en'?'active':'')+'" data-lang="en" title="English" aria-label="English">🇺🇸</button>';
+  html += '<button class="lang-flag-btn '+(LANG==='es'?'active':'')+'" data-lang="es" title="Español" aria-label="Español">'+flagEs+'</button>';
+  html += '<button class="lang-flag-btn '+(LANG==='en'?'active':'')+'" data-lang="en" title="English" aria-label="English">'+flagUs+'</button>';
   html += '</div></header>';
 
   html += '<div class="filter-bar '+(activeChips.length?'':'empty')+'">';
