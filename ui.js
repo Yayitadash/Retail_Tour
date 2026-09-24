@@ -1231,12 +1231,19 @@ function downloadAccountReport(cliente, periodo) {
   const anio = Math.floor(periodo / 100), mes = periodo % 100;
 
   // Comentario general del reporte: describe cómo cerró la cuenta en cuanto
-  // a su clasificación (venta/inventario) ese mes, reusando los mismos
-  // textos de clasifDesc() que ya usa la app — sin nombrar la clasificación,
-  // solo con su ícono. Se arma en ambos idiomas de una vez para que el
-  // reporte descargado pueda cambiar de idioma sin depender de la app. Sin
-  // ninguna referencia a "Yaya": este documento puede terminar en manos del
-  // cliente, así que el texto va en tono de análisis neutral, no de asistente.
+  // a su clasificación (venta/inventario) ese mes, reusando el mismo texto
+  // de classifDesc() que ya usa la app — sin nombrar la clasificación, solo
+  // con su ícono. Se arma en ambos idiomas de una vez para que el reporte
+  // descargado pueda cambiar de idioma sin depender de la app. Sin ninguna
+  // referencia a "Yaya": este documento puede terminar en manos del cliente,
+  // así que el texto va en tono de análisis neutral, no de asistente.
+  //
+  // Nota: antes también mencionaba de qué clasificación venía la cuenta el
+  // mes anterior, pero classifDesc() está escrito como etiqueta para EL MES
+  // ACTUAL (p. ej. Aceleradas dice "...necesitan inventario ya", un tono de
+  // urgencia que solo tiene sentido hablando de ahora) y al reusarlo para
+  // describir el mes anterior la frase se volvía confusa. Se quitó esa parte
+  // y el comentario se queda solo con la situación del mes actual.
   const cd = state.clientePeriodo[cliente];
   const metrics = cd ? computeMetricsForPeriod(cd.hist, periodo) : null;
   const clasif = metrics ? metrics.clasif : null;
@@ -1247,15 +1254,7 @@ function downloadAccountReport(cliente, periodo) {
     if (!clasif) return null;
     const desc = classifDesc(clasif, lang);
     let sentence = (lang === 'es' ? 'La cuenta tuvo ' : 'The account had ') + desc;
-    if (streak && streak.changedFrom) {
-      const n = streak.changedFrom.meses;
-      const prevDesc = classifDesc(streak.changedFrom.clasif, lang);
-      if (lang === 'es') {
-        sentence += ' Cambió este mes, tras ' + n + (n === 1 ? ' mes' : ' meses') + ': ' + prevDesc;
-      } else {
-        sentence += ' It changed this month, after ' + n + (n === 1 ? ' month' : ' months') + ': ' + prevDesc;
-      }
-    } else if (streak && streak.meses > 1) {
+    if (streak && streak.meses > 1) {
       sentence += lang === 'es'
         ? ' Lleva ' + streak.meses + ' meses consecutivos con este comportamiento.'
         : ' It has kept this pattern for ' + streak.meses + ' straight months.';
