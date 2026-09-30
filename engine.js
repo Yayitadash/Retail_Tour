@@ -152,7 +152,8 @@ function cubeFilterRows(rows, filters) {
   return rows.filter(r =>
     (!filters.un || r.un === filters.un) &&
     (!filters.cat || r.cat === filters.cat) &&
-    (!filters.gen || r.gen === filters.gen)
+    (!filters.gen || r.gen === filters.gen) &&
+    (!filters.fam || r.fam === filters.fam)
   );
 }
 
