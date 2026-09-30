@@ -557,11 +557,8 @@ function findAccountInsight(cliente, periodo, clasif) {
     .map(c => buildCandidate('cat', c.key, catLabel(c.key), { cat: c.key })).filter(Boolean);
 
   const famTop = cubeTopFamilias(rows, 8);
-  const famCandidates = famTop.map(f => {
-    const woh = (f.e && f.u) ? (f.e / f.u * 4.33) : null;
-    if (woh === null) return null;
-    return { type: 'fam', key: f.fam, label: titleCase(f.fam), share: f.v / totalV, woh, v: f.v, u: f.u };
-  }).filter(Boolean);
+  const famCandidates = famTop
+    .map(f => buildCandidate('fam', f.fam, titleCase(f.fam), { fam: f.fam })).filter(Boolean);
 
   const majorPool = unCandidates.concat(catCandidates);
 
@@ -842,7 +839,7 @@ function renderSucursalBriefing() {
     ${periodRow ? renderStoreCard(cubeRows, sucStore, periodo) : `<div class="card muted-card">${L('noMovement', periodoLabelI18n(periodo, state.lang))}</div>`}
     ${topCat ? yayaBubble(topCatUn ? L('topDriverUn', t(state.lang, 'unLabels')[topCatUn] || topCatUn, catLabel(topCat)) : L('topDriverPlain', catLabel(topCat))) : ''}
     ${periodRow ? renderExploreSection(cubeRows, sucStore, periodo) : ''}
-    ${renderRecommendationCard(cubeRows)}
+    ${renderRecommendationCard(cubeRows, sucStore, periodo)}
     ${renderClosingCard()}
   `;
 }
@@ -921,16 +918,22 @@ function renderStoreCard(cubeRows, sucStore, periodo) {
       ${topFams.length ? `
         <div class="chip-row">
           <span class="chip-row-label">${L('leadingFamilies')}</span>
-          ${renderFamList(topFams)}
+          ${renderFamList(topFams, f => cubeAvgTrailing(sucStore, { fam: f }, periodo, 12).avg)}
         </div>` : ''}
     </div>`;
 }
 
-function renderFamList(famArr) {
+// `avgFn(fam)` da el promedio mensual (últimos 12 meses) de unidades de esa
+// familia, en el mismo alcance (sucursal/filtros) desde donde se llama —
+// así el WOH de cada familia se calcula igual que en el resto del reporte:
+// existencia del mes ÷ ese promedio × 4.33, nunca contra las unidades de
+// un solo mes.
+function renderFamList(famArr, avgFn) {
   return `
     <div class="fam-list">
       ${famArr.map(f => {
-        const famWoh = (f.e && f.u) ? (f.e / f.u * 4.33) : null;
+        const avg = avgFn ? avgFn(f.fam) : null;
+        const famWoh = (avg && avg !== 0) ? (f.e / avg * 4.33) : null;
         return `
         <div class="fam-item">
           <span class="fam-name">${titleCase(f.fam)}</span>
@@ -999,7 +1002,7 @@ function renderExploreSection(cubeRows, sucStore, periodo) {
         ${topFams.length ? `
           <div class="detail-section">
             <span class="detail-section-label">${L('leadingFamiliesScoped', scopeLabel)}</span>
-            ${renderFamList(topFams)}
+            ${renderFamList(topFams, f => cubeAvgTrailing(sucStore, Object.assign({}, filters, { fam: f }), periodo, 12).avg)}
           </div>` : `<p class="explore-empty">${L('exploreNoData')}</p>`}
       </div>`;
   } else {
@@ -1044,17 +1047,23 @@ function renderAccountRecoCard(metrics) {
   return yayaBubble(`${templates[metrics.clasif]}`);
 }
 
-function renderRecommendationCard(cubeRows) {
-  const lines = buildRecommendations(cubeRows);
+function renderRecommendationCard(cubeRows, sucStore, periodo) {
+  const lines = buildRecommendations(cubeRows, sucStore, periodo);
   if (!lines.length) return '';
   return yayaBubble(`<ul class="reco-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`);
 }
 
-function buildRecommendations(cubeRows) {
+function buildRecommendations(cubeRows, sucStore, periodo) {
   const lines = [];
   if (!cubeRows || !cubeRows.length) return lines;
   const unLabels = t(state.lang, 'unLabels');
   const genLabels = t(state.lang, 'genLabels');
+
+  const wohOf = (baseFilters, fam) => {
+    const avg = cubeAvgTrailing(sucStore, Object.assign({}, baseFilters, { fam }), periodo, 12).avg;
+    const f = cubeTopFamilias(cubeFilterRows(cubeRows, Object.assign({}, baseFilters, { fam })), 1)[0];
+    return (f && avg && avg !== 0) ? (f.e / avg) * 4.33 : null;
+  };
 
   // 1) Unidad de negocio líder + su género dominante
   const unBreak = cubeBreakdown(cubeRows, 'un');
@@ -1069,8 +1078,9 @@ function buildRecommendations(cubeRows) {
   const catBreak = cubeBreakdown(cubeRows, 'cat');
   if (catBreak.length) {
     const topCat = catBreak[0].key;
-    const catFams = cubeTopFamilias(cubeFilterRows(cubeRows, { cat: topCat }), 5);
-    const hot = catFams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
+    const catFams = cubeTopFamilias(cubeFilterRows(cubeRows, { cat: topCat }), 5)
+      .map(f => Object.assign({}, f, { woh: wohOf({ cat: topCat }, f.fam) }));
+    const hot = catFams.find(f => f.woh !== null && f.woh < 15);
     if (hot) lines.push(L('recoHotItem', titleCase(hot.fam), catLabel(topCat)));
     else lines.push(L('recoCat', catLabel(topCat)));
   }
@@ -1079,8 +1089,9 @@ function buildRecommendations(cubeRows) {
   for (const un of ['FW', 'APP']) {
     const unRows = cubeFilterRows(cubeRows, { un });
     if (!unRows.length) continue;
-    const fams = cubeTopFamilias(unRows, 5);
-    const low = fams.find(f => f.e && f.u && (f.e / f.u * 4.33) < 15);
+    const fams = cubeTopFamilias(unRows, 5)
+      .map(f => Object.assign({}, f, { woh: wohOf({ un }, f.fam) }));
+    const low = fams.find(f => f.woh !== null && f.woh < 15);
     if (low) {
       const genForLow = cubeBreakdown(unRows, 'gen');
       const gen = genForLow.length ? genForLow[0].key : null;
@@ -1271,8 +1282,15 @@ function downloadAccountReport(cliente, periodo) {
   // que viene bajando fuerte). Van aparte del comentario de clasificación
   // para no mezclar "cómo está hoy" con "cómo viene mejorando" en una
   // misma frase. Solo aparecen cuando la mejora es clara:
-  //   - Inventario: WOH bajó al menos 5 semanas vs. el mes anterior.
+  //   - Inventario: semanas de inventario bajaron al menos 5 vs. el mes anterior.
   //   - Ventas: valor $ creció al menos 10% vs. el mes anterior.
+  //
+  // Las semanas de inventario (WOH) se calculan SIEMPRE de la misma forma
+  // en toda la app y en este reporte: existencia del mes ÷ promedio de
+  // unidades vendidas de los últimos 12 meses (terminando en ese mes) × 4.33
+  // — nunca contra las unidades de un solo mes. Por eso aquí se reusa
+  // `metrics`/`computeMetricsForPeriod`, la misma fuente que usa el motor
+  // de clasificación, en vez de recalcular con otra fórmula.
   const prevPeriodo = periodoAddMonths(periodo, -1);
   const prevMetrics = cd ? computeMetricsForPeriod(cd.hist, prevPeriodo) : null;
 
@@ -1283,11 +1301,11 @@ function downloadAccountReport(cliente, periodo) {
     if (metrics.woh != null && prevMetrics.woh != null) {
       const wohDrop = prevMetrics.woh - metrics.woh;
       if (wohDrop >= 5) {
-        const fromW = Math.round(prevMetrics.woh), toW = Math.round(metrics.woh);
+        const dropRounded = Math.round(wohDrop);
         notes.push({
           icon: '📉',
-          es: 'El inventario mejoró: bajó de ' + fromW + ' a ' + toW + ' semanas respecto al mes anterior.',
-          en: 'Inventory improved: it dropped from ' + fromW + ' to ' + toW + ' weeks versus the prior month.'
+          es: 'El inventario mejoró: bajó ' + dropRounded + ' semanas respecto al mes anterior.',
+          en: 'Inventory improved: it dropped ' + dropRounded + ' weeks versus the prior month.'
         });
       }
     }
@@ -1310,7 +1328,42 @@ function downloadAccountReport(cliente, periodo) {
   const momentum = buildMomentumNotes();
   const clasifIcon = clasif && CLASIFICACIONES[clasif] ? CLASIFICACIONES[clasif].icon : '📊';
 
-  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, momentum: momentum }, state.lang);
+  // Promedios de unidades de los últimos 12 meses (terminando en `periodo`,
+  // o en `pyPeriodo` para el comparativo del año anterior), por cada
+  // sucursal/categoría/familia/UN/género que aparece en este reporte. El
+  // reporte descargable es un archivo standalone sin acceso al histórico
+  // completo, así que estos promedios se calculan aquí (donde sí hay acceso
+  // a `state`) y se le pasan ya resueltos — así CUALQUIER "semanas de
+  // inventario" que se vea en el reporte, a cualquier nivel, usa la misma
+  // base de 12 meses que el motor de clasificación, nunca solo el mes.
+  const storeNames = Array.from(new Set(rows.map(r => r.s)));
+  const catKeys = Array.from(new Set(rows.map(r => r.cat)));
+  const famKeys = Array.from(new Set(rows.map(r => r.fam)));
+  const unKeys = Array.from(new Set(rows.map(r => r.un)));
+  const genKeys = Array.from(new Set(rows.map(r => r.gen)));
+
+  const avgByStore = {};
+  storeNames.forEach(function (s) {
+    const sucStore = state.sucursalPeriodo[cliente] && state.sucursalPeriodo[cliente][s];
+    avgByStore[s] = sucStore ? cubeAvgTrailing(sucStore, {}, periodo, 12).avg : null;
+  });
+  const avgByCat = {};
+  catKeys.forEach(function (c) { avgByCat[c] = clientCubeAvgTrailing(cliente, { cat: c }, periodo, 12).avg; });
+  const avgByFam = {};
+  famKeys.forEach(function (f) { avgByFam[f] = clientCubeAvgTrailing(cliente, { fam: f }, periodo, 12).avg; });
+  const avgByUn = {};
+  unKeys.forEach(function (u) { avgByUn[u] = clientCubeAvgTrailing(cliente, { un: u }, periodo, 12).avg; });
+  const avgByGen = {};
+  genKeys.forEach(function (g) { avgByGen[g] = clientCubeAvgTrailing(cliente, { gen: g }, periodo, 12).avg; });
+
+  const pyMetrics = cd ? computeMetricsForPeriod(cd.hist, pyPeriodo) : null;
+  const avg = {
+    account: metrics ? metrics.avgUnits : null,
+    accountPY: pyMetrics ? pyMetrics.avgUnits : null,
+    store: avgByStore, cat: avgByCat, fam: avgByFam, un: avgByUn, gen: avgByGen
+  };
+
+  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, momentum: momentum, avg: avg }, state.lang);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
@@ -1533,7 +1586,13 @@ function fmtUnits(v){ return Math.round(v).toLocaleString(LANG==='es'?'es-US':'e
 function fmtPct(v){ return (v*100).toFixed(1)+'%'; }
 function fmtGrowth(v){ if(v===null||v===undefined) return '—'; var pct=(v*100).toFixed(0); return (v>=0?'+':'')+pct+'%'; }
 function gClass(v){ if(v===null||v===undefined) return ''; return v>=0?'stat-pos':'stat-neg'; }
-function computeWoh(e,u){ return u ? (e/u)*4.33 : null; }
+// Semanas de inventario (WOH): SIEMPRE existencia del mes ÷ promedio de
+// unidades de los últimos 12 meses (terminando en el mes del reporte) — la
+// misma base que usa el motor de clasificación de la app, nunca las
+// unidades de un solo mes. Ese promedio ya viene precalculado desde la app
+// (downloadAccountReport, que sí tiene acceso al histórico completo) en
+// DATA.insight.avg, porque este archivo standalone no lo tiene.
+function wohFromAvg(e,avgUnits){ return (avgUnits && avgUnits!==0) ? (e/avgUnits)*4.33 : null; }
 function fmtUnitDiff(cur,py){ if(cur===null||cur===undefined||py===null||py===undefined) return null; var diff=Math.round(cur)-Math.round(py); if(diff===0) return t('noChange'); return (diff>0?'+':'')+fmtUnits(diff); }
 function fmtPtsDiff(cur,py){ if(cur===null||cur===undefined||py===null||py===undefined) return null; var diff=cur-py; if(Math.abs(diff)<0.05) return t('noChange'); return (diff>0?'+':'')+diff.toFixed(1)+' pts'; }
 function diffClass(cur,py){ if(cur===null||cur===undefined||py===null||py===undefined) return ''; var diff=cur-py; if(Math.abs(diff)<0.0001) return ''; return diff>0?'stat-pos':'stat-neg'; }
@@ -1574,8 +1633,24 @@ function render(){
   var pyTotals=sumRows(filterRows(null,pyRows));
   var growthValor=(hasPy&&pyTotals.v)?(totals.v-pyTotals.v)/Math.abs(pyTotals.v):null;
   var growthUnits=(hasPy&&pyTotals.u)?(totals.u-pyTotals.u)/Math.abs(pyTotals.u):null;
-  var curWoh=computeWoh(totals.e,totals.u);
-  var pyWoh=hasPy?computeWoh(pyTotals.e,pyTotals.u):null;
+
+  // Promedios de 12 meses precalculados por la app (ver downloadAccountReport).
+  // Este archivo standalone no tiene el histórico completo, así que solo
+  // puede resolver el promedio correcto para la cuenta sin filtrar, o para
+  // UN filtro a la vez (sucursal, UN, categoría o género). Si se combina
+  // más de un filtro a la vez no hay promedio de 12 meses precalculado para
+  // esa combinación exacta, y el WOH se muestra como "—" en vez de arriesgar
+  // un número calculado con otra fórmula.
+  var AVG=(DATA.insight&&DATA.insight.avg)||{};
+  function resolveAvg(f){
+    var active=[]; if(f.s) active.push('s'); if(f.un) active.push('un'); if(f.cat) active.push('cat'); if(f.gen) active.push('gen');
+    if(active.length===0) return AVG.account;
+    if(active.length>1) return null;
+    var dim=active[0], map=AVG[dim==='s'?'store':dim];
+    return map ? map[f[dim]] : null;
+  }
+  var curWoh=wohFromAvg(totals.e,resolveAvg(filters));
+  var pyWoh=(hasPy&&!filtered)?wohFromAvg(pyTotals.e,AVG.accountPY):null;
 
   var storeCandidates=groupBy(filterRows('s'),'s').sort(function(a,b){return b.v-a.v;});
   var storeTotal=storeCandidates.reduce(function(s,x){return s+x.v;},0)||1;
@@ -1594,9 +1669,9 @@ function render(){
   var famList=groupBy(fullyFiltered,'fam').sort(function(a,b){return b.v-a.v;}).slice(0,10);
   var famTotal=totals.v||1;
   var maxStoreV=Math.max.apply(null,storeCandidates.map(function(s){return s.v;}).concat([1]));
-  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:computeWoh(s.e,s.u) }; });
-  var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:computeWoh(x.e,x.u) }; });
-  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:computeWoh(f.e,f.u) }; });
+  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:wohFromAvg(s.e,AVG.store?AVG.store[s.key]:null) }; });
+  var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:wohFromAvg(x.e,AVG.cat?AVG.cat[x.key]:null) }; });
+  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null) }; });
 
   function chipLabel(dim,key){ if(dim==='un') return I18N[LANG].un[key]||key; if(dim==='gen') return I18N[LANG].gen[key]||key; if(dim==='s') return titleCase(key); return key; }
 
@@ -1613,18 +1688,18 @@ function render(){
       var x=unCandidates.filter(function(c){return c.key===filters.un;})[0];
       if(!x) return t('insightUnGenNeutral');
       var share=x.v/unTotal;
-      return t('insightUnGenSelected', (I18N[LANG].un[x.key]||x.key), Math.round(share*100), fmtWoh(computeWoh(x.e,x.u)), growthSuffix(x,pyUnMap[x.key]));
+      return t('insightUnGenSelected', (I18N[LANG].un[x.key]||x.key), Math.round(share*100), fmtWoh(wohFromAvg(x.e,AVG.un?AVG.un[x.key]:null)), growthSuffix(x,pyUnMap[x.key]));
     }
     if(filters.gen){
       var gx=genCandidates.filter(function(c){return c.key===filters.gen;})[0];
       if(!gx) return t('insightUnGenNeutral');
       var shareG=gx.v/genTotal;
-      return t('insightUnGenSelected', (I18N[LANG].gen[gx.key]||gx.key), Math.round(shareG*100), fmtWoh(computeWoh(gx.e,gx.u)), growthSuffix(gx,pyGenMap[gx.key]));
+      return t('insightUnGenSelected', (I18N[LANG].gen[gx.key]||gx.key), Math.round(shareG*100), fmtWoh(wohFromAvg(gx.e,AVG.gen?AVG.gen[gx.key]:null)), growthSuffix(gx,pyGenMap[gx.key]));
     }
     var top=unCandidates[0];
     if(!top) return t('insightUnGenNeutral');
     var shareTop=top.v/unTotal;
-    return t('insightUnTop', (I18N[LANG].un[top.key]||top.key), Math.round(shareTop*100), fmtWoh(computeWoh(top.e,top.u)), growthSuffix(top,pyUnMap[top.key]));
+    return t('insightUnTop', (I18N[LANG].un[top.key]||top.key), Math.round(shareTop*100), fmtWoh(wohFromAvg(top.e,AVG.un?AVG.un[top.key]:null)), growthSuffix(top,pyUnMap[top.key]));
   }
 
   var activeChips=[];
@@ -1703,7 +1778,7 @@ function render(){
     html += '<span class="podium-rank">'+(i+1)+'</span>';
     html += '<div class="podium-main"><span class="podium-name">'+titleCase(s.key)+'</span>';
     html += '<div class="podium-track-row"><div class="podium-track"><div class="podium-fill" style="width:'+(s.v/maxStoreV*100).toFixed(0)+'%"></div></div><span class="podium-share-inline">'+Math.round(share*100)+'%</span></div></div>';
-    html += '<div class="podium-woh"><div class="podium-woh-value">'+fmtWoh(computeWoh(s.e,s.u))+'</div><div class="podium-woh-label">WOH</div></div>';
+    html += '<div class="podium-woh"><div class="podium-woh-value">'+fmtWoh(wohFromAvg(s.e,AVG.store?AVG.store[s.key]:null))+'</div><div class="podium-woh-label">WOH</div></div>';
     html += '<div class="podium-figures"><div class="podium-money">'+fmtMoneyShort(s.v)+'</div>'+(hasPy?'<div class="podium-growth '+gClass(sGrowth)+'">'+fmtGrowth(sGrowth)+'</div>':'')+'</div>';
     html += '</button>';
   });
@@ -1740,7 +1815,7 @@ function render(){
     if(filters.cat && !isActive) return; // se eligió una categoría: las demás no se muestran (misma lógica que sucursales)
     var share=x.v/catTotal;
     var pyX=pyCatMap[x.key], catGrowth=(hasPy&&pyX&&pyX.v)?(x.v-pyX.v)/Math.abs(pyX.v):null;
-    var catWoh=computeWoh(x.e,x.u);
+    var catWoh=wohFromAvg(x.e,AVG.cat?AVG.cat[x.key]:null);
     html += '<button class="cat-row '+(isActive?'active':'')+'" data-dim="cat" data-key="'+escapeAttr(x.key)+'">';
     html += '<div class="cat-row-top"><span class="cat-label">'+x.key+'</span><span class="cat-share">'+fmtPct(share)+'</span></div>';
     html += '<div class="bar-track"><div class="bar-fill gold" style="width:'+(share*100).toFixed(0)+'%"></div></div>';
@@ -1760,7 +1835,7 @@ function render(){
   if(famList.length){
     html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num fam-col-pct">'+t('famCol4')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th></tr></thead><tbody>';
     famList.forEach(function(f,i){
-      var fWoh=computeWoh(f.e,f.u);
+      var fWoh=wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null);
       var arrow = fWoh===null ? '' : (fWoh<20 ? '<span class="woh-arrow woh-down">▼</span>' : '<span class="woh-arrow woh-up">▲</span>');
       html += '<tr><td><span class="fam-rank">'+(i+1)+'</span>'+titleCase(f.key)+'</td><td class="num fam-col-pct">'+fmtPct(f.v/famTotal)+'</td><td class="num">'+fmtUnits(f.u)+'</td><td class="num">'+fmtMoney(f.v)+'</td><td class="num">'+fmtUnits(f.e)+'</td><td class="num">'+fmtWoh(fWoh)+' '+arrow+'</td></tr>';
     });
