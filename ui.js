@@ -1264,9 +1264,53 @@ function downloadAccountReport(cliente, periodo) {
 
   const insightEs = buildClasifNarrative('es');
   const insightEn = buildClasifNarrative('en');
+
+  // Notas de mejora ("momentum"): reconocen cuando inventario o venta
+  // mejoraron de forma notable respecto al MES ANTERIOR, aunque la cuenta
+  // siga en una clasificación que suena negativa (p. ej. inventario alto
+  // que viene bajando fuerte). Van aparte del comentario de clasificación
+  // para no mezclar "cómo está hoy" con "cómo viene mejorando" en una
+  // misma frase. Solo aparecen cuando la mejora es clara:
+  //   - Inventario: WOH bajó al menos 5 semanas vs. el mes anterior.
+  //   - Ventas: valor $ creció al menos 10% vs. el mes anterior.
+  const prevPeriodo = periodoAddMonths(periodo, -1);
+  const prevMetrics = cd ? computeMetricsForPeriod(cd.hist, prevPeriodo) : null;
+
+  function buildMomentumNotes() {
+    const notes = [];
+    if (!metrics || !prevMetrics) return notes;
+
+    if (metrics.woh != null && prevMetrics.woh != null) {
+      const wohDrop = prevMetrics.woh - metrics.woh;
+      if (wohDrop >= 5) {
+        const fromW = Math.round(prevMetrics.woh), toW = Math.round(metrics.woh);
+        notes.push({
+          icon: '📉',
+          es: 'El inventario mejoró: bajó de ' + fromW + ' a ' + toW + ' semanas respecto al mes anterior.',
+          en: 'Inventory improved: it dropped from ' + fromW + ' to ' + toW + ' weeks versus the prior month.'
+        });
+      }
+    }
+
+    if (metrics.valor && prevMetrics.valor) {
+      const growth = (metrics.valor - prevMetrics.valor) / Math.abs(prevMetrics.valor);
+      if (growth >= 0.10) {
+        const pct = Math.round(growth * 100);
+        notes.push({
+          icon: '📈',
+          es: 'Las ventas mejoraron: crecieron ' + pct + '% respecto al mes anterior.',
+          en: 'Sales improved: they grew ' + pct + '% versus the prior month.'
+        });
+      }
+    }
+
+    return notes;
+  }
+
+  const momentum = buildMomentumNotes();
   const clasifIcon = clasif && CLASIFICACIONES[clasif] ? CLASIFICACIONES[clasif].icon : '📊';
 
-  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon }, state.lang);
+  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, momentum: momentum }, state.lang);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
@@ -1330,9 +1374,9 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight, lang)
   .brand-name{font-family:var(--font-display); font-weight:800; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
   .brand-period{font-size:14px; color:var(--text-soft); margin-top:4px;}
   .lang-switch{display:flex; gap:6px;}
-  .lang-flag-btn{display:flex; border:1.5px solid var(--line); background:var(--paper-card); padding:5px; border-radius:8px; cursor:pointer; opacity:0.4; filter:grayscale(60%); transition:opacity .15s, filter .15s, border-color .15s;}
+  .lang-flag-btn{display:flex; border:1.5px solid var(--line); background:var(--paper-card); padding:5px; border-radius:8px; cursor:pointer; opacity:0.55; filter:grayscale(25%); transition:opacity .15s, filter .15s, border-color .15s;}
   .lang-flag-btn svg{display:block; width:22px; height:16px; border-radius:2px;}
-  .lang-flag-btn:hover{opacity:0.85;}
+  .lang-flag-btn:hover{opacity:1;}
   .lang-flag-btn.active{opacity:1; filter:none; border-color:var(--ink);}
   .filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--line); min-height:20px;}
   .filter-bar.empty{display:none;}
@@ -1357,6 +1401,10 @@ function buildAccountReportHTML(cliente, mes, anio, rows, pyRows, insight, lang)
   .insight-note-label{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold); margin-bottom:4px;}
   .insight-note-icon{font-size:17px; line-height:1;}
   .insight-note-text{font-size:14px; line-height:1.5; color:var(--text-soft); font-style:italic;}
+  .insight-note-momentum{display:flex; flex-direction:column; gap:6px;}
+  .momentum-line{display:flex; align-items:flex-start; gap:8px;}
+  .momentum-icon{font-size:17px; line-height:1.5; flex-shrink:0;}
+  .momentum-text{font-size:14px; line-height:1.5; color:var(--text-soft); font-style:italic;}
   section{margin-top:48px;}
   .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:12px;}
   .section-title{font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
@@ -1630,6 +1678,18 @@ function render(){
   var insightText = (DATA.insight && DATA.insight[LANG]) || t('insightGeneralNeutral');
   var insightIcon = (DATA.insight && DATA.insight.icon) || '📊';
   html += '<div class="insight-note"><div class="insight-note-label insight-note-icon">'+insightIcon+'</div><div class="insight-note-text">'+insightText+'</div></div>';
+
+  // Notas de mejora (inventario/ventas vs. mes anterior): reconocen el
+  // esfuerzo de la cuenta aunque su clasificacion general suene negativa.
+  // Solo se muestran cuando el motor detecto una mejora clara (ver
+  // downloadAccountReport). Ambas, si aplican, van en un solo bloque.
+  var momentumNotes = (DATA.insight && DATA.insight.momentum) || [];
+  if (momentumNotes.length) {
+    var momentumHtml = momentumNotes.map(function(n){
+      return '<div class="momentum-line"><span class="momentum-icon">'+n.icon+'</span><span class="momentum-text">'+(n[LANG]||n.es)+'</span></div>';
+    }).join('');
+    html += '<div class="insight-note insight-note-momentum">'+momentumHtml+'</div>';
+  }
 
   html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div>';
   html += '<div class="insight-note"><div class="insight-note-text">'+sectionInsight(storesPool,t('nounStore'),0.15,'insightStoresNeutral')+'</div></div>';
