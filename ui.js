@@ -1114,7 +1114,18 @@ function renderUploadModal() {
       <p class="modal-copy">${L('uploadCopy')}</p>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
       <div id="uploadStatus" class="upload-status"></div>
+      <div id="uploadAnomalies" class="upload-anomalies hidden"></div>
     </div>`;
+}
+
+// Arma el texto del aviso para una sola fila de detectUploadAnomalies()
+// (ver upload.js). "fuente" dice contra qué se comparó: el mismo mes del
+// año anterior (py) o el promedio de los últimos 12 meses (avg12) cuando
+// no había dato del año pasado.
+function uploadAnomalyLine(a) {
+  const periodoTxt = periodoLabelI18n(a.periodo, state.lang);
+  const fuenteTxt = a.fuente === 'py' ? L('anomalyVsPy') : L('anomalyVsAvg');
+  return `<div class="upload-anomaly-item">⚠️ <b>${titleCase(a.cliente)}</b> — ${periodoTxt} — ${a.field}: <b>${fmtUnits(a.nuevo)}</b> (esperado ~${fmtUnits(a.esperado)}, ${fuenteTxt})</div>`;
 }
 
 // ---------- Handlers ----------
@@ -1890,6 +1901,17 @@ async function handleFileUpload(e) {
     const labels = parsed.periodos.map(p => periodoLabelI18n(p, state.lang)).join(', ');
     const payloads = splitByCliente(parsed);
 
+    // Guardamos una foto de lo que había ANTES de mezclar, para poder comparar
+    // lo nuevo contra lo viejo (mergeClientePeriodo modifica state.clientePeriodo
+    // en el sitio, así que esto debe hacerse antes de la mezcla).
+    const oldClientePeriodo = {};
+    for (const payload of payloads) {
+      const cliente = payload.cliente;
+      if (state.clientePeriodo[cliente]) {
+        oldClientePeriodo[cliente] = { hist: state.clientePeriodo[cliente].hist.slice() };
+      }
+    }
+
     // Aplicamos los cambios en memoria de una vez (la app se ve actualizada al instante)
     for (const payload of payloads) {
       mergeClientePeriodo(state.clientePeriodo, payload.cliente_periodo);
@@ -1908,7 +1930,20 @@ async function handleFileUpload(e) {
     ));
 
     statusEl.textContent = L('done', labels);
-    setTimeout(() => { document.getElementById('uploadModal').classList.add('hidden'); render(); }, 1200);
+
+    // Alerta no-bloqueante: compara lo recién cargado contra lo esperado y, si
+    // algo se ve fuera de lo normal, se lo deja visible para que ella revise
+    // el Excel que acaba de subir (solo en su propia sesión, nadie más la ve).
+    const anomalies = detectUploadAnomalies(payloads, oldClientePeriodo);
+    const anomaliesEl = document.getElementById('uploadAnomalies');
+    if (anomalies.length && anomaliesEl) {
+      anomaliesEl.innerHTML = `<div class="upload-anomalies-title">${L('uploadAnomaliesTitle')}</div>` +
+        anomalies.map(uploadAnomalyLine).join('');
+      anomaliesEl.classList.remove('hidden');
+      render();
+    } else {
+      setTimeout(() => { document.getElementById('uploadModal').classList.add('hidden'); render(); }, 1200);
+    }
   } catch (err) {
     console.error(err);
     statusEl.textContent = 'Error: ' + err.message;

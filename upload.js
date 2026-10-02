@@ -225,3 +225,63 @@ function splitByCliente(parsed) {
   }
   return payloads;
 }
+
+// ============================================================
+// Alerta de carga: avisa (sin bloquear nada) cuando una cuenta/mes recién
+// subido se ve demasiado distinto de lo esperado — p. ej. data duplicada o
+// pegada dos veces, como pasó con Tec en agosto. No es una validación
+// estricta: solo marca para que se revise el Excel que se acaba de cargar.
+//
+// "Lo esperado" es el MISMO MES del año anterior cuando existe (así
+// noviembre/diciembre, que suelen ser altos, se comparan contra su propio
+// noviembre/diciembre anterior y no contra el promedio del año completo).
+// Si no hay dato del año anterior, se usa el promedio de los últimos 12
+// meses como respaldo.
+const UPLOAD_ANOMALY_HIGH = 1.8;  // 80% o más por encima de lo esperado
+const UPLOAD_ANOMALY_LOW = 0.55;  // 45% o más por debajo de lo esperado
+const UPLOAD_ANOMALY_FIELDS = [
+  { key: 'v', label: 'Venta $' },
+  { key: 'u', label: 'Unidades vendidas' },
+  { key: 'e', label: 'Existencia' }
+];
+
+function uploadAnomalyBaseline(oldHist, periodo, key) {
+  const pyRow = oldHist.find(r => r.p === periodo - 100);
+  if (pyRow && pyRow[key]) return { value: pyRow[key], source: 'py' };
+  const windowPeriods = new Set();
+  for (let k = 1; k <= 12; k++) windowPeriods.add(periodoAddMonths(periodo, -k));
+  const avail = oldHist.filter(r => windowPeriods.has(r.p));
+  if (!avail.length) return null;
+  const avg = avail.reduce((s, r) => s + r[key], 0) / avail.length;
+  return avg ? { value: avg, source: 'avg12' } : null;
+}
+
+/**
+ * Compara lo recién parseado (`payloads`, de splitByCliente) contra lo que
+ * ya había en la app ANTES de esta carga (`oldClientePeriodo`, tal cual
+ * estaba state.clientePeriodo antes de mezclar el nuevo archivo). Devuelve
+ * una lista de avisos; vacía si todo se ve dentro de lo razonable.
+ */
+function detectUploadAnomalies(payloads, oldClientePeriodo) {
+  const flags = [];
+  for (const payload of payloads) {
+    const cliente = payload.cliente;
+    const newHist = (payload.cliente_periodo[cliente] && payload.cliente_periodo[cliente].hist) || [];
+    const oldHist = (oldClientePeriodo[cliente] && oldClientePeriodo[cliente].hist) || [];
+    for (const row of newHist) {
+      for (const f of UPLOAD_ANOMALY_FIELDS) {
+        const baseline = uploadAnomalyBaseline(oldHist, row.p, f.key);
+        if (!baseline) continue;
+        const ratio = row[f.key] / baseline.value;
+        if (ratio >= UPLOAD_ANOMALY_HIGH || ratio <= UPLOAD_ANOMALY_LOW) {
+          flags.push({
+            cliente, periodo: row.p, field: f.label,
+            nuevo: row[f.key], esperado: Math.round(baseline.value),
+            fuente: baseline.source
+          });
+        }
+      }
+    }
+  }
+  return flags;
+}
