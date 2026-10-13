@@ -1557,6 +1557,10 @@ const I18N = {
     insightUnGenSelected:(name,sharePct,woh,growthSuffix)=>name+' representa el '+sharePct+'% de la venta seleccionada, con '+woh+' semanas de inventario.'+growthSuffix,
     insightUnTop:(name,sharePct,woh,growthSuffix)=>name+' es tu unidad de negocio más fuerte este periodo, con '+sharePct+'% de la venta y '+woh+' semanas de inventario.'+growthSuffix,
     insightStoresNeutral:'La cobertura de inventario entre sucursales se ve equilibrada, sin señales de riesgo relevantes.',
+    insightDigitalLeader:(label,pct)=>label+' es tu sucursal con más ventas ('+pct+'% del total), aunque al ser un canal digital no maneja inventario propio, así que no aplica revisar su cobertura.',
+    insightPhysLeaderOver:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), aunque ya acumula '+woh+' semanas de inventario. Vale la pena revisar el mix ahí antes de seguir reabasteciendo.',
+    insightPhysLeaderUnder:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), pero su inventario apenas alcanza '+woh+' semanas. Ahí puede haber ventas quedándose sobre la mesa por falta de stock.',
+    insightPhysLeaderNeutral:(label,pct)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), con una cobertura de inventario saludable.',
     insightCatNeutral:'La cobertura de inventario entre categorías se ve equilibrada, sin señales de riesgo relevantes.',
     insightFamNeutral:'La cobertura de inventario en las familias líderes se ve saludable, sin señales de desabasto ni sobre-stock relevantes.',
     insightRobustas:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta), pero ya acumula '+woh+' semanas de inventario. Vale la pena revisar el mix ahí antes de seguir reabasteciendo.',
@@ -1582,6 +1586,10 @@ const I18N = {
     insightUnGenSelected:(name,sharePct,woh,growthSuffix)=>name+' accounts for '+sharePct+'% of the selected sales, with '+woh+' weeks of inventory.'+growthSuffix,
     insightUnTop:(name,sharePct,woh,growthSuffix)=>name+' is your strongest business unit this period, with '+sharePct+'% of sales and '+woh+' weeks of inventory.'+growthSuffix,
     insightStoresNeutral:'Inventory coverage across stores looks balanced, with no notable risk signals.',
+    insightDigitalLeader:(label,pct)=>label+' is your top-selling store ('+pct+'% of total sales), but since it is a digital channel it does not carry its own inventory, so its coverage is not something to review.',
+    insightPhysLeaderOver:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), though it is already carrying '+woh+' weeks of inventory. Worth reviewing the mix there before restocking further.',
+    insightPhysLeaderUnder:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), but its inventory only covers about '+woh+' weeks. There may be sales left on the table here due to low stock.',
+    insightPhysLeaderNeutral:(label,pct)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), with healthy inventory coverage.',
     insightCatNeutral:'Inventory coverage across categories looks balanced, with no notable risk signals.',
     insightFamNeutral:'Inventory coverage across the leading families looks healthy, with no notable stockout or overstock signals.',
     insightRobustas:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales), but it is already carrying '+woh+' weeks of inventory. Worth reviewing the mix there before restocking further.',
@@ -1624,6 +1632,32 @@ function sectionInsight(pool,noun,minShare,neutralKey){
   if(!over && !under) return t(neutralKey);
   if(under && under_s>=over_s) return t('insightDesabastecidas',under.label,noun,Math.round(under.share*100),under.woh.toFixed(1));
   return t('insightRobustas',over.label,noun,Math.round(over.share*100),over.woh.toFixed(1));
+}
+// Comentario de la sección de sucursales: si la que más vende en total es un
+// canal digital (sin inventario propio), la reconoce como tal por separado y
+// luego comenta ventas/inventario de la sucursal FÍSICA con mayor venta — en
+// vez de llamar "más fuerte" a una sucursal física que en realidad no es la
+// que más vende, cuando la verdadera líder es la digital.
+function storeSectionInsight(storeCandidates,storeTotal,avgByStore){
+  var overallTop=storeCandidates[0];
+  var physPool=storeCandidates.filter(function(s){ return !isDigitalStore(s.key); })
+    .map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:wohFromAvg(s.e,avgByStore?avgByStore[s.key]:null) }; });
+  if(!overallTop || !isDigitalStore(overallTop.key)){
+    return sectionInsight(physPool,t('nounStore'),0.15,'insightStoresNeutral');
+  }
+  var digitalLabel=titleCase(overallTop.key);
+  var digitalPct=Math.round((overallTop.v/storeTotal)*100);
+  var prefix=t('insightDigitalLeader',digitalLabel,digitalPct);
+  var clean=physPool.filter(function(c){ return c.woh!==null && c.woh!==undefined && c.share>0; });
+  if(!clean.length) return prefix+' '+t('insightStoresNeutral');
+  var over=bestByScore(clean,function(c){return c.share*(c.woh-HEALTHY_HIGH);},0.15);
+  var over_s=over?over.share*(over.woh-HEALTHY_HIGH):0;
+  var under=bestByScore(clean,function(c){return c.share*(HEALTHY_LOW-c.woh);},0.15);
+  var under_s=under?under.share*(HEALTHY_LOW-under.woh):0;
+  var topPhys=physPool.slice().sort(function(a,b){return b.share-a.share;})[0];
+  if(!over && !under) return prefix+' '+t('insightPhysLeaderNeutral',topPhys.label,Math.round(topPhys.share*100));
+  if(under && under_s>=over_s) return prefix+' '+t('insightPhysLeaderUnder',under.label,Math.round(under.share*100),under.woh.toFixed(1));
+  return prefix+' '+t('insightPhysLeaderOver',over.label,Math.round(over.share*100),over.woh.toFixed(1));
 }
 function titleCase(s){ if(!s) return s; var lower=String(s).toLowerCase(); var out=''; for(var i=0;i<lower.length;i++){ var prev = i===0 ? ' ' : lower.charAt(i-1); var isSep = (prev===' '||prev==='/'||prev==='#'); out += isSep ? lower.charAt(i).toUpperCase() : lower.charAt(i); } return out; }
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
@@ -1690,7 +1724,6 @@ function render(){
   var famList=groupBy(fullyFiltered,'fam').sort(function(a,b){return b.v-a.v;}).slice(0,10);
   var famTotal=totals.v||1;
   var maxStoreV=Math.max.apply(null,storeCandidates.map(function(s){return s.v;}).concat([1]));
-  var storesPool=storeCandidates.filter(function(s){ return !isDigitalStore(s.key); }).map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:wohFromAvg(s.e,AVG.store?AVG.store[s.key]:null) }; });
   var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:wohFromAvg(x.e,AVG.cat?AVG.cat[x.key]:null) }; });
   var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null) }; });
 
@@ -1788,7 +1821,7 @@ function render(){
   }
 
   html += '<section><div class="section-head"><span class="section-title">'+t('storesTitle')+'</span><span class="section-note">'+(filters.s?t('storesNoteFiltered'):t('storesNote'))+'</span></div>';
-  html += '<div class="insight-note"><div class="insight-note-text">'+sectionInsight(storesPool,t('nounStore'),0.15,'insightStoresNeutral')+'</div></div>';
+  html += '<div class="insight-note"><div class="insight-note-text">'+storeSectionInsight(storeCandidates,storeTotal,AVG.store)+'</div></div>';
   html += '<div class="podium-list">';
   storeCandidates.forEach(function(s,i){
     var isActive=filters.s===s.key;
