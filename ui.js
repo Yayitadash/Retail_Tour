@@ -1627,6 +1627,16 @@ function sectionInsight(pool,noun,minShare,neutralKey){
 }
 function titleCase(s){ if(!s) return s; var lower=String(s).toLowerCase(); var out=''; for(var i=0;i<lower.length;i++){ var prev = i===0 ? ' ' : lower.charAt(i-1); var isSep = (prev===' '||prev==='/'||prev==='#'); out += isSep ? lower.charAt(i).toUpperCase() : lower.charAt(i); } return out; }
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+// Una sucursal digital (tienda online, web, marketplace) no maneja
+// inventario propio: su "stock" es el de las demás sucursales/el depósito.
+// Por eso nunca debe ser el foco de un comentario sobre cobertura de
+// inventario (ni de sobre-stock ni de desabasto) aunque sea la que más
+// vende. Sigue apareciendo normalmente en el ranking y las cifras de venta.
+function isDigitalStore(name){
+  if(!name) return false;
+  var n=String(name).toUpperCase();
+  return /\\bDIGITAL\\b|\\bONLINE\\b|\\bEN\\s*LINEA\\b|\\bWEB\\b|\\.COM\\b|\\bECOMMERCE\\b|\\bE-COMMERCE\\b|\\bVIRTUAL\\b|MERCADO\\s*LIBRE|\\bAMAZON\\b/.test(n);
+}
 function matchesFilters(row,f,exclude){ var dims=['s','un','cat','gen']; for(var i=0;i<dims.length;i++){ var k=dims[i]; if(k===exclude) continue; if(f[k] && row[k]!==f[k]) return false; } return true; }
 function filterRows(exclude,source){ return (source||DATA.rows).filter(function(r){return matchesFilters(r,filters,exclude);}); }
 function sumRows(rows){ return rows.reduce(function(a,r){a.v+=r.v;a.u+=r.u;a.e+=r.e;return a;},{v:0,u:0,e:0}); }
@@ -1680,7 +1690,7 @@ function render(){
   var famList=groupBy(fullyFiltered,'fam').sort(function(a,b){return b.v-a.v;}).slice(0,10);
   var famTotal=totals.v||1;
   var maxStoreV=Math.max.apply(null,storeCandidates.map(function(s){return s.v;}).concat([1]));
-  var storesPool=storeCandidates.map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:wohFromAvg(s.e,AVG.store?AVG.store[s.key]:null) }; });
+  var storesPool=storeCandidates.filter(function(s){ return !isDigitalStore(s.key); }).map(function(s){ return { label:titleCase(s.key), share:s.v/storeTotal, woh:wohFromAvg(s.e,AVG.store?AVG.store[s.key]:null) }; });
   var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:wohFromAvg(x.e,AVG.cat?AVG.cat[x.key]:null) }; });
   var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null) }; });
 
