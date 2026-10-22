@@ -511,6 +511,28 @@ function renderAccountFilters(cliente, periodo) {
     </div>`;
 }
 
+/**
+ * Filtro compacto solo por unidad de negocio para la pantalla de cuenta (sin
+ * burbuja de Yaya, para que quede pegado al KPI). Categoría y género se
+ * quitaron de esta pantalla a propósito: siguen disponibles en la de sucursal.
+ */
+function renderAccountBuFilter(cliente, periodo) {
+  const cubeRows = getClientCubeRows(cliente, periodo);
+  if (!cubeRows.length) return '';
+  const unLabels = t(state.lang, 'unLabels');
+  const unOptions = UN_ORDER.filter(u => cubeRows.some(r => r.un === u));
+  if (!unOptions.length) return '';
+  return `
+    <div class="card explore-card bu-filter-card">
+      <div class="explore-group">
+        <span class="detail-section-label">${L('businessUnitsIn')}</span>
+        <div class="chips">
+          ${unOptions.map(u => `<button class="chip chip-filter ${state.filterUn === u ? 'active' : ''}" data-filter-un="${u}">${unLabels[u] || u}</button>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
 function accountFilterScopeLabel() {
   const unLabels = t(state.lang, 'unLabels');
   const genLabels = t(state.lang, 'genLabels');
@@ -704,22 +726,26 @@ function renderCuentaStep() {
     return { s, v, hasData, growthValor };
   }).sort((a, b) => b.v - a.v);
 
+  // Orden pensado para que, al cambiar de mes o de filtro, el KPI quede
+  // pegado a los controles y no haya que subir y bajar la pantalla:
+  // burbujas de Yaya → clasificación → selector de mes (+ descarga) → KPI →
+  // filtro por BU → comentarios de Yaya → lista de sucursales.
   return `
     <div class="step-head">
       ${yayaBubble(L('confirmCliente', titleCase(state.cliente)))}
     </div>
+    ${yayaBubble(L('beforeStore'))}
+    ${renderClassificationCard(metrics, streak, form)}
     <div class="period-nav">
       <button class="period-arrow" id="periodPrev" ${canPrev ? '' : 'disabled'}>‹</button>
       <span class="period-label">${periodoLabelI18n(periodo, state.lang)}</span>
       <button class="period-arrow" id="periodNext" ${canNext ? '' : 'disabled'}>›</button>
       <button class="download-report-btn" id="downloadReportBtn" title="${L('downloadReport')}">⤓</button>
     </div>
-    ${yayaBubble(L('beforeStore'))}
-    ${renderClassificationCard(metrics, streak, form)}
     ${statsCardHtml}
+    ${renderAccountBuFilter(state.cliente, periodo)}
     ${!anyFilter ? renderAvgSalesBubble(metrics) : ''}
     ${!anyFilter ? renderAccountInsightBubble(state.cliente, periodo, metrics ? metrics.clasif : null) : ''}
-    ${renderAccountFilters(state.cliente, periodo)}
     ${yayaBubble(L('askSucursal'))}
     <div class="pick-list">
       ${sucursalesConVenta.map(({ s, hasData, v, growthValor }) => {
