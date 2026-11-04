@@ -1314,7 +1314,9 @@ function downloadAccountReport(cliente, periodo) {
           : 'La cuenta tuvo buena venta, con un inventario que viene acumulándose.',
         'Zona de Riesgo': 'La cuenta muestra un crecimiento bajo, con desequilibrios en el mix de inventario.',
         'Desabastecidas': 'La cuenta no contó con el stock necesario para lograr mejores resultados de venta.',
-        'Riesgo Crítico': 'La cuenta tuvo ventas contraídas, con exceso de inventario en producto de lento movimiento.'
+        'Riesgo Crítico': holiday
+          ? 'La cuenta tuvo ventas por debajo del año anterior y entra a la temporada alta de holidays con inventario disponible para recuperar ritmo.'
+          : 'La cuenta tuvo ventas contraídas, con exceso de inventario en producto de lento movimiento.'
       },
       en: {
         'Las Estrellas': 'The account closed the month with strong sales and healthy inventory: the ideal balance.',
@@ -1324,7 +1326,9 @@ function downloadAccountReport(cliente, periodo) {
           : 'The account had good sales, with inventory building up.',
         'Zona de Riesgo': 'The account shows low growth, with an unbalanced inventory mix.',
         'Desabastecidas': 'The account did not have the stock needed to reach better sales results.',
-        'Riesgo Crítico': 'The account had shrinking sales, with excess inventory in slow-moving product.'
+        'Riesgo Crítico': holiday
+          ? 'The account had sales below last year and enters the holiday peak with inventory available to regain pace.'
+          : 'The account had shrinking sales, with excess inventory in slow-moving product.'
       }
     };
     let sentence = (S[lang] && S[lang][clasif]) || ((lang === 'es' ? 'La cuenta tuvo ' : 'The account had ') + classifDesc(clasif, lang));
@@ -1367,8 +1371,8 @@ function downloadAccountReport(cliente, periodo) {
         const dropRounded = Math.round(wohDrop);
         notes.push({
           icon: '📉',
-          es: 'El inventario mejoró: bajó ' + dropRounded + ' semanas respecto al mes anterior.',
-          en: 'Inventory improved: it dropped ' + dropRounded + ' weeks versus the prior month.'
+          es: (mes >= 10 && mes <= 12 ? 'El inventario está rotando bien: bajó ' : 'El inventario mejoró: bajó ') + dropRounded + ' semanas respecto al mes anterior.',
+          en: (mes >= 10 && mes <= 12 ? 'Inventory is turning well: it dropped ' : 'Inventory improved: it dropped ') + dropRounded + ' weeks versus the prior month.'
         });
       }
     }
@@ -1613,8 +1617,12 @@ const I18N = {
     insightPhysLeaderOver:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), aunque ya acumula '+woh+' semanas de inventario. Vale la pena revisar el mix ahí antes de seguir reabasteciendo.',
     insightPhysLeaderUnder:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), pero su inventario apenas alcanza '+woh+' semanas. Ahí puede haber ventas quedándose sobre la mesa por falta de stock.',
     insightPhysLeaderNeutral:(label,pct)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), con una cobertura de inventario saludable.',
-    insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y entra a la temporada alta de holidays con '+woh+' semanas de inventario, bien respaldado para capturar la demanda de fin de año.',
-    insightPhysLeaderOverHoliday:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y entra a la temporada alta de holidays con '+woh+' semanas de inventario, lista para capturar la demanda de fin de año.',
+    insightDesabastecidasHoliday:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y su inventario cubre unas '+woh+' semanas: con la temporada alta de holidays en marcha, es buen momento para reforzar el surtido y capturar aún más venta.',
+    insightPhysLeaderUnderHoliday:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y su inventario cubre unas '+woh+' semanas: con la temporada alta de holidays en marcha, es buen momento para reforzar su surtido y capturar aún más venta.',
+    insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y llega a la temporada alta de holidays bien surtido, con '+woh+' semanas de inventario para respaldar la demanda de fin de año.',
+    insightRobustasHolidayHigh:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y cuenta con un amplio surtido para la temporada alta de holidays ('+woh+' semanas de inventario), con espacio para acelerar su rotación durante noviembre y diciembre.',
+    insightPhysLeaderOverHoliday:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y llega a la temporada alta de holidays bien surtida, con '+woh+' semanas de inventario para respaldar la demanda de fin de año.',
+    insightPhysLeaderOverHolidayHigh:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y cuenta con un amplio surtido para la temporada alta de holidays ('+woh+' semanas de inventario), con espacio para acelerar su rotación durante noviembre y diciembre.',
     insightCatNeutral:'La cobertura de inventario entre categorías se ve equilibrada, sin señales de riesgo relevantes.',
     insightFamNeutral:'La cobertura de inventario en las familias líderes se ve saludable, sin señales de desabasto ni sobre-stock relevantes.',
     insightRobustas:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta), pero ya acumula '+woh+' semanas de inventario. Vale la pena revisar el mix ahí antes de seguir reabasteciendo.',
@@ -1644,8 +1652,12 @@ const I18N = {
     insightPhysLeaderOver:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), though it is already carrying '+woh+' weeks of inventory. Worth reviewing the mix there before restocking further.',
     insightPhysLeaderUnder:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), but its inventory only covers about '+woh+' weeks. There may be sales left on the table here due to low stock.',
     insightPhysLeaderNeutral:(label,pct)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), with healthy inventory coverage.',
-    insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and heads into the holiday peak with '+woh+' weeks of inventory, well backed to capture year-end demand.',
-    insightPhysLeaderOverHoliday:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and heads into the holiday peak with '+woh+' weeks of inventory, ready to capture year-end demand.',
+    insightDesabastecidasHoliday:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and its inventory covers about '+woh+' weeks: with the holiday peak underway, it is a good moment to reinforce the assortment and capture even more sales.',
+    insightPhysLeaderUnderHoliday:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and its inventory covers about '+woh+' weeks: with the holiday peak underway, it is a good moment to reinforce its assortment and capture even more sales.',
+    insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and heads into the holiday peak well stocked, with '+woh+' weeks of inventory to back year-end demand.',
+    insightRobustasHolidayHigh:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and has a broad assortment ready for the holiday peak ('+woh+' weeks of inventory), with room to speed up its turnover through November and December.',
+    insightPhysLeaderOverHoliday:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and heads into the holiday peak well stocked, with '+woh+' weeks of inventory to back year-end demand.',
+    insightPhysLeaderOverHolidayHigh:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and has a broad assortment ready for the holiday peak ('+woh+' weeks of inventory), with room to speed up its turnover through November and December.',
     insightCatNeutral:'Inventory coverage across categories looks balanced, with no notable risk signals.',
     insightFamNeutral:'Inventory coverage across the leading families looks healthy, with no notable stockout or overstock signals.',
     insightRobustas:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales), but it is already carrying '+woh+' weeks of inventory. Worth reviewing the mix there before restocking further.',
@@ -1680,6 +1692,11 @@ function bestByScore(pool,scoreFn,minShare){
 }
 // Temporada alta de holidays (oct-dic): el inventario alto es preparación para
 // el pico, no acumulación, así que el reporte usa lenguaje positivo ahí.
+// Hasta este nivel de semanas de inventario el reporte lo presenta como
+// "bien surtido"; por encima, como "amplio surtido con espacio para acelerar"
+// (sigue siendo positivo, solo más matizado). Ajustable aquí.
+var HOLIDAY_WOH_CAP=40;
+function holidayKey(base,woh){ return base+(woh>HOLIDAY_WOH_CAP?'HolidayHigh':'Holiday'); }
 function isHolidaySeason(){ var m=DATA&&DATA.periodo?DATA.periodo.mes:0; return m>=10&&m<=12; }
 function sectionInsight(pool,noun,minShare,neutralKey){
   var clean=pool.filter(function(c){ return c.woh!==null && c.woh!==undefined && c.share>0; });
@@ -1689,8 +1706,8 @@ function sectionInsight(pool,noun,minShare,neutralKey){
   var under=bestByScore(clean,function(c){return c.share*(HEALTHY_LOW-c.woh);},minShare);
   var under_s=under?under.share*(HEALTHY_LOW-under.woh):0;
   if(!over && !under) return t(neutralKey);
-  if(under && under_s>=over_s) return t('insightDesabastecidas',under.label,noun,Math.round(under.share*100),under.woh.toFixed(1));
-  return t(isHolidaySeason()?'insightRobustasHoliday':'insightRobustas',over.label,noun,Math.round(over.share*100),over.woh.toFixed(1));
+  if(under && under_s>=over_s) return t(isHolidaySeason()?'insightDesabastecidasHoliday':'insightDesabastecidas',under.label,noun,Math.round(under.share*100),under.woh.toFixed(1));
+  return t(isHolidaySeason()?holidayKey('insightRobustas',over.woh):'insightRobustas',over.label,noun,Math.round(over.share*100),over.woh.toFixed(1));
 }
 // Comentario de la sección de sucursales: si la que más vende en total es un
 // canal digital (sin inventario propio), la reconoce como tal por separado y
@@ -1715,8 +1732,8 @@ function storeSectionInsight(storeCandidates,storeTotal,avgByStore){
   var under_s=under?under.share*(HEALTHY_LOW-under.woh):0;
   var topPhys=physPool.slice().sort(function(a,b){return b.share-a.share;})[0];
   if(!over && !under) return prefix+' '+t('insightPhysLeaderNeutral',topPhys.label,Math.round(topPhys.share*100));
-  if(under && under_s>=over_s) return prefix+' '+t('insightPhysLeaderUnder',under.label,Math.round(under.share*100),under.woh.toFixed(1));
-  return prefix+' '+t(isHolidaySeason()?'insightPhysLeaderOverHoliday':'insightPhysLeaderOver',over.label,Math.round(over.share*100),over.woh.toFixed(1));
+  if(under && under_s>=over_s) return prefix+' '+t(isHolidaySeason()?'insightPhysLeaderUnderHoliday':'insightPhysLeaderUnder',under.label,Math.round(under.share*100),under.woh.toFixed(1));
+  return prefix+' '+t(isHolidaySeason()?holidayKey('insightPhysLeaderOver',over.woh):'insightPhysLeaderOver',over.label,Math.round(over.share*100),over.woh.toFixed(1));
 }
 function titleCase(s){ if(!s) return s; var lower=String(s).toLowerCase(); var out=''; for(var i=0;i<lower.length;i++){ var prev = i===0 ? ' ' : lower.charAt(i-1); var isSep = (prev===' '||prev==='/'||prev==='#'); out += isSep ? lower.charAt(i).toUpperCase() : lower.charAt(i); } return out; }
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
@@ -2013,46 +2030,6 @@ async function handleFileUpload(e) {
         oldClientePeriodo[cliente] = { hist: state.clientePeriodo[cliente].hist.slice() };
       }
     }
-
-    // Aplicamos los cambios en memoria de una vez (la app se ve actualizada al instante)
-    for (const payload of payloads) {
-      mergeClientePeriodo(state.clientePeriodo, payload.cliente_periodo);
-      mergeSucursalPeriodo(state.sucursalPeriodo, payload.sucursal_periodo);
-      mergeNav(state.nav, payload.nav);
-    }
-
-    // Guardado en Firebase en paralelo, un documento chico por cliente
-    let done = 0;
-    statusEl.textContent = L('savingProgress', done, payloads.length);
-    await Promise.all(payloads.map(payload =>
-      saveClientUpload(payload).then(() => {
-        done++;
-        statusEl.textContent = L('savingProgress', done, payloads.length);
-      })
-    ));
-
-    statusEl.textContent = L('done', labels);
-
-    // Alerta no-bloqueante: compara lo recién cargado contra lo esperado y, si
-    // algo se ve fuera de lo normal, se lo deja visible para que ella revise
-    // el Excel que acaba de subir (solo en su propia sesión, nadie más la ve).
-    const anomalies = detectUploadAnomalies(payloads, oldClientePeriodo);
-    const anomaliesEl = document.getElementById('uploadAnomalies');
-    if (anomalies.length && anomaliesEl) {
-      anomaliesEl.innerHTML = `<div class="upload-anomalies-title">${L('uploadAnomaliesTitle')}</div>` +
-        anomalies.map(uploadAnomalyLine).join('');
-      anomaliesEl.classList.remove('hidden');
-      render();
-    } else {
-      setTimeout(() => { document.getElementById('uploadModal').classList.add('hidden'); render(); }, 1200);
-    }
-  } catch (err) {
-    console.error(err);
-    statusEl.textContent = 'Error: ' + err.message;
-  }
-}
-
-boot();
 
     // Aplicamos los cambios en memoria de una vez (la app se ve actualizada al instante)
     for (const payload of payloads) {
