@@ -1430,7 +1430,7 @@ function downloadAccountReport(cliente, periodo) {
     store: avgByStore, cat: avgByCat, fam: avgByFam, un: avgByUn, gen: avgByGen
   };
 
-  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, momentum: momentum, avg: avg }, state.lang);
+  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, clasif: clasif, momentum: momentum, avg: avg }, state.lang);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
@@ -1619,6 +1619,8 @@ const I18N = {
     insightPhysLeaderNeutral:(label,pct)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total), con una cobertura de inventario saludable.',
     insightDesabastecidasHoliday:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y su inventario cubre unas '+woh+' semanas: con la temporada alta de holidays en marcha, es buen momento para reforzar el surtido y capturar aún más venta.',
     insightPhysLeaderUnderHoliday:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y su inventario cubre unas '+woh+' semanas: con la temporada alta de holidays en marcha, es buen momento para reforzar su surtido y capturar aún más venta.',
+    insightFamImbalance:(label,declPct,woh)=>'El desequilibrio del mix se ve en '+label+': vende '+declPct+'% menos que el año pasado y mantiene '+woh+' semanas de inventario.',
+    insightFamImbalancePair:(low,lowPct,lowWoh,high,declPct,highWoh)=>'Aquí se ve el desequilibrio del mix: '+low+' es de lo más vendido ('+lowPct+'% de la venta) y su inventario cubre solo '+lowWoh+' semanas, mientras que '+high+' vende '+declPct+'% menos que el año pasado y mantiene '+highWoh+' semanas de inventario.',
     insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y llega a la temporada alta de holidays bien surtido, con '+woh+' semanas de inventario para respaldar la demanda de fin de año.',
     insightRobustasHolidayHigh:(label,noun,sharePct,woh)=>label+' es tu '+noun+' más fuerte ('+sharePct+'% de la venta) y cuenta con un amplio surtido para la temporada alta de holidays ('+woh+' semanas de inventario), con espacio para acelerar su rotación durante noviembre y diciembre.',
     insightPhysLeaderOverHoliday:(label,pct,woh)=>'Entre tus sucursales físicas, '+label+' es la que más vende ('+pct+'% del total) y llega a la temporada alta de holidays bien surtida, con '+woh+' semanas de inventario para respaldar la demanda de fin de año.',
@@ -1654,6 +1656,8 @@ const I18N = {
     insightPhysLeaderNeutral:(label,pct)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total), with healthy inventory coverage.',
     insightDesabastecidasHoliday:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and its inventory covers about '+woh+' weeks: with the holiday peak underway, it is a good moment to reinforce the assortment and capture even more sales.',
     insightPhysLeaderUnderHoliday:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and its inventory covers about '+woh+' weeks: with the holiday peak underway, it is a good moment to reinforce its assortment and capture even more sales.',
+    insightFamImbalance:(label,declPct,woh)=>'The mix imbalance shows in '+label+': it sells '+declPct+'% less than last year and holds '+woh+' weeks of inventory.',
+    insightFamImbalancePair:(low,lowPct,lowWoh,high,declPct,highWoh)=>'This is where the mix imbalance shows: '+low+' is among your top sellers ('+lowPct+'% of sales) and its inventory covers only '+lowWoh+' weeks, while '+high+' sells '+declPct+'% less than last year and holds '+highWoh+' weeks of inventory.',
     insightRobustasHoliday:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and heads into the holiday peak well stocked, with '+woh+' weeks of inventory to back year-end demand.',
     insightRobustasHolidayHigh:(label,noun,sharePct,woh)=>label+' is your strongest '+noun+' ('+sharePct+'% of sales) and has a broad assortment ready for the holiday peak ('+woh+' weeks of inventory), with room to speed up its turnover through November and December.',
     insightPhysLeaderOverHoliday:(label,pct,woh)=>'Among your physical stores, '+label+' sells the most ('+pct+'% of total) and heads into the holiday peak well stocked, with '+woh+' weeks of inventory to back year-end demand.',
@@ -1666,7 +1670,7 @@ const I18N = {
     insightAceleradas:(label,woh)=>label+' is among your best sellers and its inventory already dropped to just '+woh+' weeks. Given the growth pace, it is worth getting ahead of a potential stockout.',
     un:{FW:'Footwear',APP:'Apparel',EQ:'Equipment',LIC:'Licensed'}, gen:{MEN:'Men',WOMEN:'Women',KIDS:'Kids'} }
 };
-function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2],arguments[3],arguments[4]):v; }
+function t(k){ const v=I18N[LANG][k]; return typeof v==='function'?v(arguments[1],arguments[2],arguments[3],arguments[4],arguments[5],arguments[6]):v; }
 function fmtMoney(v){ return '$'+Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
 function fmtMoneyShort(v){ if(v===null||v===undefined) return '—'; var abs=Math.abs(v); var sign=v<0?'-':''; if(abs>=1000000) return sign+'$'+(abs/1000000).toFixed(abs%1000000===0?0:1)+'M'; if(abs>=1000) return sign+'$'+Math.round(abs/1000)+'K'; return sign+'$'+Math.round(abs); }
 function fmtUnits(v){ return Math.round(v).toLocaleString(LANG==='es'?'es-US':'en-US'); }
@@ -1697,6 +1701,27 @@ function bestByScore(pool,scoreFn,minShare){
 // (sigue siendo positivo, solo más matizado). Ajustable aquí.
 var HOLIDAY_WOH_CAP=40;
 function holidayKey(base,woh){ return base+(woh>HOLIDAY_WOH_CAP?'HolidayHigh':'Holiday'); }
+// Si la cuenta cayó en "Zona de Riesgo" (crecimiento bajo + desequilibrio en
+// el mix de inventario), la sección de familias muestra el ejemplo más claro:
+// una familia que vende menos que el año pasado (-5% o peor) y tiene el
+// inventario alto (>26 sem). Gana la de mayor (exceso de semanas x caída).
+function famImbalanceInsight(pool){
+  if(!(DATA.insight&&DATA.insight.clasif==='Zona de Riesgo')) return null;
+  var best=null,bestScore=0;
+  pool.forEach(function(c){
+    if(c.woh===null||c.woh===undefined||c.g===null||c.g===undefined) return;
+    if(c.g>-0.05||c.woh<30) return;
+    var sc=(c.woh-HEALTHY_HIGH)*(-c.g);
+    if(sc>bestScore){bestScore=sc;best=c;}
+  });
+  if(!best) return null;
+  // Contraparte: de las 5 familias que más venden, la de mayor venta con
+  // inventario ajustado (<20 sem), si existe.
+  var low=pool.filter(function(c){return c!==best&&c.woh!==null&&c.woh!==undefined&&c.woh<HEALTHY_LOW&&c.share>0;}).sort(function(a,b){return b.share-a.share;}).slice(0,5)[0];
+  var top5=pool.slice().sort(function(a,b){return b.share-a.share;}).slice(0,5);
+  if(low&&top5.indexOf(low)>-1) return t('insightFamImbalancePair',low.label,Math.round(low.share*100),low.woh.toFixed(1),best.label,Math.round(-best.g*100),best.woh.toFixed(1));
+  return t('insightFamImbalance',best.label,Math.round(-best.g*100),best.woh.toFixed(1));
+}
 function isHolidaySeason(){ var m=DATA&&DATA.periodo?DATA.periodo.mes:0; return m>=10&&m<=12; }
 function sectionInsight(pool,noun,minShare,neutralKey){
   var clean=pool.filter(function(c){ return c.woh!==null && c.woh!==undefined && c.share>0; });
@@ -1801,7 +1826,8 @@ function render(){
   var famTotal=totals.v||1;
   var maxStoreV=Math.max.apply(null,storeCandidates.map(function(s){return s.v;}).concat([1]));
   var catPool=catCandidatesAll.map(function(x){ return { label:x.key, share:x.v/catTotal, woh:wohFromAvg(x.e,AVG.cat?AVG.cat[x.key]:null) }; });
-  var famPool=famList.map(function(f){ return { label:titleCase(f.key), share:f.v/famTotal, woh:wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null) }; });
+  var pyFamMap={}; groupBy(filterRows(null,pyRows),'fam').forEach(function(x){ pyFamMap[x.key]=x; });
+  var famPool=famList.map(function(f){ var py=pyFamMap[f.key]; return { label:titleCase(f.key), share:f.v/famTotal, woh:wohFromAvg(f.e,AVG.fam?AVG.fam[f.key]:null), g:(hasPy&&py&&py.v>0)?(f.v-py.v)/py.v:null }; });
 
   function chipLabel(dim,key){ if(dim==='un') return I18N[LANG].un[key]||key; if(dim==='gen') return I18N[LANG].gen[key]||key; if(dim==='s') return titleCase(key); return key; }
 
@@ -1961,7 +1987,7 @@ function render(){
   html += '</div></section>';
 
   html += '<section><div class="section-head"><span class="section-title">'+t('famTitle')+'</span><span class="section-note">'+t('famNote')+'</span></div>';
-  html += '<div class="insight-note"><div class="insight-note-text">'+sectionInsight(famPool,t('nounFam'),0,'insightFamNeutral')+'</div></div>';
+  html += '<div class="insight-note"><div class="insight-note-text">'+(famImbalanceInsight(famPool)||sectionInsight(famPool,t('nounFam'),0,'insightFamNeutral'))+'</div></div>';
   if(famList.length){
     html += '<div class="table-scroll"><table class="fam-table"><thead><tr><th>'+t('famCol1')+'</th><th class="num fam-col-pct">'+t('famCol4')+'</th><th class="num">'+t('famColSold')+'</th><th class="num">'+t('famCol3')+'</th><th class="num">'+t('famColInv')+'</th><th class="num">'+t('famColWoh')+'</th></tr></thead><tbody>';
     famList.forEach(function(f,i){
