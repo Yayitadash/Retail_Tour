@@ -1651,6 +1651,10 @@ function buildAnnualReportHTML(data, lang) {
   .lang-switch{display:flex; gap:6px;}
   .lang-btn{border:1.5px solid var(--line); background:var(--paper-card); padding:5px 10px; border-radius:8px; cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--text-soft);}
   .lang-btn.active{border-color:var(--ink); color:var(--ink); font-weight:600;}
+  .lang-flag-btn{display:flex; border:1.5px solid var(--line); background:var(--paper-card); padding:5px; border-radius:8px; cursor:pointer; opacity:0.55; filter:grayscale(25%); transition:opacity .15s, filter .15s, border-color .15s;}
+  .lang-flag-btn svg{display:block; width:22px; height:16px; border-radius:2px;}
+  .lang-flag-btn:hover{opacity:1;}
+  .lang-flag-btn.active{opacity:1; filter:none; border-color:var(--ink);}
   .hero{padding:30px 0 8px; text-align:center;}
   .hero-month{font-family:var(--font-mono); font-size:12px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold);}
   .hero-label{font-size:14px; color:var(--text-soft); margin:6px 0 8px;}
@@ -1718,7 +1722,7 @@ var GENL = { es:{MEN:'Hombre',WOMEN:'Mujer',KIDS:'Niños'}, en:{MEN:'Men',WOMEN:
 var I18N = {
   es:{ eyebrow:'Retail Tour — Resumen del año', saleOf:function(m){return 'Venta de '+m;}, units:'Unidades vendidas', inv:'Unidades en inventario', woh:'Semanas de inventario',
     vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'Sin datos del año anterior para comparar', ytd:function(m,a,b){return 'Acumulado '+a+' – '+b;},
-    classLabel:'Clasificación del mes', readTitle:'Lectura del año', timeline:'Mes a mes', tlNote:'toca un mes para ver su detalle',
+    classLabel:'Clasificación del mes', readTitle:'Lectura del año', timeline:'Mes a mes', tlNote:'toca un mes para ver su detalle · tócalo de nuevo para volver a todo el año', allYear:'Todo el año', saleYear:'Ventas acumuladas', invAt:function(m){return 'Unidades en inventario (a '+m+')';}, wohAt:function(m){return 'Semanas de inventario (a '+m+')';}, classAt:function(m){return 'Clasificación a '+m;}, yearNote:function(a,b){return 'Acumulado '+a+' – '+b+' · WOH al cierre';}, yearApprox:'Las sucursales y familias suman los meses en que aparecen entre las principales de cada mes.',
     mSales:'Ventas', mUnits:'Unidades', mInv:'Inventario', legBar:'Este año', legPy:'Mismo mes del año anterior',
     wohTitle:'Semanas de inventario', wohNote:'zona saludable: 20 a 26 semanas', stores:'Sucursales', un:'Unidad de negocio', cat:'Categoría', gen:'Género', fam:'Familias / siluetas líderes',
     famNote:'top 10 por ventas', empty:'Sin datos para este mes.', woh1:'WOH', footL:'Preparado con Retail Tour', footR:function(a,b,y){return 'Datos de '+a+' a '+b+' '+y;},
@@ -1727,7 +1731,7 @@ var I18N = {
     readWoh:function(a,av,b,bv){return 'Las semanas de inventario pasaron de '+av+' en '+a+' a '+bv+' en '+b+'.';} },
   en:{ eyebrow:'Retail Tour — Year Summary', saleOf:function(m){return m+' sales';}, units:'Units sold', inv:'Units in inventory', woh:'Weeks of inventory',
     vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'No prior-year data to compare', ytd:function(m,a,b){return 'Year to date '+a+' – '+b;},
-    classLabel:'Month classification', readTitle:'Year at a glance', timeline:'Month by month', tlNote:'tap a month to see its detail',
+    classLabel:'Month classification', readTitle:'Year at a glance', timeline:'Month by month', tlNote:'tap a month to see its detail · tap it again to go back to the full year', allYear:'Full year', saleYear:'Year-to-date sales', invAt:function(m){return 'Units in inventory (at '+m+')';}, wohAt:function(m){return 'Weeks of inventory (at '+m+')';}, classAt:function(m){return 'Classification at '+m;}, yearNote:function(a,b){return 'Cumulative '+a+' – '+b+' · WOH at close';}, yearApprox:'Stores and families add up the months in which they appear among the top of each month.',
     mSales:'Sales', mUnits:'Units', mInv:'Inventory', legBar:'This year', legPy:'Same month last year',
     wohTitle:'Weeks of inventory', wohNote:'healthy zone: 20 to 26 weeks', stores:'Stores', un:'Business unit', cat:'Category', gen:'Gender', fam:'Leading families / silhouettes',
     famNote:'top 10 by sales', empty:'No data for this month.', woh1:'WOH', footL:'Prepared with Retail Tour', footR:function(a,b,y){return a+' to '+b+' '+y+' data';},
@@ -1748,8 +1752,25 @@ function gcls(g){ if(g===null) return ''; return g>=0?'stat-pos':'stat-neg'; }
 function wohOf(e,avg){ return (avg&&avg!==0&&e!==null&&e!==undefined)?(e/avg)*4.33:null; }
 function fmtWoh(w){ return w===null?'—':w.toFixed(1); }
 function mname(p,long){ var m=p%100; return (long?MNL:MN)[LANG][m-1]; }
-var M = DATA.months, st = { p:M[M.length-1].p, metric:'v' };
+var M = DATA.months, st = { p:null, metric:'v' };
 function cur(){ for(var i=0;i<M.length;i++){ if(M[i].p===st.p) return M[i]; } return M[M.length-1]; }
+function yearAgg(){
+  var last=M[M.length-1];
+  var Y={p:null,v:0,u:0,mv:0,mu:0,pv:0,pu:0,e:last.e,pe:last.pe,avgU:last.avgU,clasif:last.clasif};
+  M.forEach(function(x){ Y.v+=x.v; Y.u+=x.u; if(x.pv!==null&&x.pv!==undefined){ Y.mv+=x.v; Y.pv+=x.pv; } if(x.pu!==null&&x.pu!==undefined){ Y.mu+=x.u; Y.pu+=x.pu; } });
+  if(!Y.pv) Y.pv=null; if(!Y.pu) Y.pu=null;
+  [['stores',12],['un',0],['cat',0],['gen',0],['fam',10]].forEach(function(d){
+    var map={};
+    M.forEach(function(x){ (x[d[0]]||[]).forEach(function(r){
+      var a=map[r.k]; if(!a) a=map[r.k]={k:r.k,v:0,u:0,mv:0,pv:0,e:null,avgU:null,lp:0};
+      a.v+=r.v; a.u+=r.u; if(r.pv!==null&&r.pv!==undefined){ a.mv+=r.v; a.pv+=r.pv; } a.e=r.e; a.avgU=r.avgU; a.lp=x.p;
+    }); });
+    var list=Object.keys(map).map(function(k){ var a=map[k]; if(!a.pv) a.pv=null; if(a.lp!==last.p){ a.e=null; a.avgU=null; } return a; });
+    list.sort(function(a,b){ return b.v-a.v; });
+    Y[d[0]]=d[1]?list.slice(0,d[1]):list;
+  });
+  return Y;
+}
 function dimLabel(dim,k){ if(dim==='un') return UNL[LANG][k]||k; if(dim==='gen') return GENL[LANG][k]||k; if(dim==='s') return tc(k); return k; }
 
 function rowsBlock(list,dim,total){
@@ -1757,7 +1778,7 @@ function rowsBlock(list,dim,total){
   if(!list.length) return '<div class="empty">'+T('empty')+'</div>';
   var h='<div class="rows">';
   list.forEach(function(x){
-    var share=total?x.v/total:0, g=growth(x.v,x.pv), w=wohOf(x.e,x.avgU);
+    var share=total?x.v/total:0, g=(x.mv!==undefined?growth(x.mv,x.pv):growth(x.v,x.pv)), w=wohOf(x.e,x.avgU);
     h+='<div class="row"><div class="row-name">'+esc(dimLabel(dim,x.k))+'</div>';
     h+='<div class="row-fig"><div class="row-money">'+fmtShort(x.v,'v')+'</div>';
     h+='<div class="row-g '+gcls(g)+'">'+(g===null?'':fmtG(g))+'</div>';
@@ -1803,7 +1824,7 @@ function wohChart(){
     s+='<text x="'+X(i)+'" y="'+(H-9)+'" font-size="12" text-anchor="middle" fill="'+(sel?'#17202A':'#6B6459')+'" font-family="monospace">'+mname(M[i].p)+'</text>';
     if(w===null) return;
     s+='<circle cx="'+X(i)+'" cy="'+Y(w)+'" r="'+(sel?7:4)+'" fill="'+(sel?'#C89B3C':'#3A5A78')+'" stroke="#fff" stroke-width="1.5"/>';
-    if(sel||M.length<=6) s+='<text x="'+X(i)+'" y="'+(Y(w)-11)+'" font-size="13" text-anchor="middle" fill="#17202A" font-family="monospace" font-weight="700">'+w.toFixed(1)+'</text>';
+    if(sel||st.p===null||M.length<=6) s+='<text x="'+X(i)+'" y="'+(Y(w)-11)+'" font-size="13" text-anchor="middle" fill="#17202A" font-family="monospace" font-weight="700">'+w.toFixed(1)+'</text>';
   });
   return s+'</svg>';
 }
@@ -1826,30 +1847,30 @@ function readingBlock(){
 }
 
 function render(){
-  var m=cur(), y=DATA.year, ml=mname(m.p,true), first=mname(M[0].p,true), last=mname(M[M.length-1].p,true);
-  var gV=growth(m.v,m.pv), gU=growth(m.u,m.pu), gE=growth(m.e,m.pe), w=wohOf(m.e,m.avgU);
+  var isY=(st.p===null), m=isY?yearAgg():cur(), y=DATA.year, first=mname(M[0].p,true), last=mname(M[M.length-1].p,true), ml=isY?(first===last?first:first+' – '+last):mname(m.p,true);
+  var gV=isY?growth(m.mv,m.pv):growth(m.v,m.pv), gU=isY?growth(m.mu,m.pu):growth(m.u,m.pu), gE=growth(m.e,m.pe), w=wohOf(m.e,m.avgU);
   var pyWoh=null; // el comparativo de WOH del año anterior requiere su propio promedio; solo se muestra el valor del mes
   var meta=m.clasif&&DATA.clasifMeta[m.clasif];
   var h='<header><div class="brand"><div class="brand-eyebrow">'+T('eyebrow')+'</div><div class="brand-name">'+esc(tc(DATA.cliente))+'</div><div class="brand-period">'+first+' – '+last+' '+y+'</div></div>';
-  h+='<div class="lang-switch"><button class="lang-btn'+(LANG==='es'?' active':'')+'" data-act="lang" data-l="es">ES</button><button class="lang-btn'+(LANG==='en'?' active':'')+'" data-act="lang" data-l="en">EN</button></div></header>';
-  h+='<div class="hero"><div class="hero-month">'+ml+' '+y+'</div><div class="hero-label">'+T('saleOf',ml)+'</div><div class="hero-number">'+fmtMoney(m.v)+'</div>';
+  h+='<div class="lang-switch"><button class="lang-flag-btn'+(LANG==='es'?' active':'')+'" data-act="lang" data-l="es" title="Español" aria-label="Español"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#AA151B"/><rect y="5" width="30" height="10" fill="#F1BF00"/></svg></button><button class="lang-flag-btn'+(LANG==='en'?' active':'')+'" data-act="lang" data-l="en" title="English" aria-label="English"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#FFFFFF"/><rect width="30" height="1.54" fill="#B22234"/><rect y="3.08" width="30" height="1.54" fill="#B22234"/><rect y="6.16" width="30" height="1.54" fill="#B22234"/><rect y="9.24" width="30" height="1.54" fill="#B22234"/><rect y="12.32" width="30" height="1.54" fill="#B22234"/><rect y="15.4" width="30" height="1.54" fill="#B22234"/><rect y="18.46" width="30" height="1.54" fill="#B22234"/><rect width="12" height="10.8" fill="#3C3B6E"/></svg></button></div></header>';
+  h+='<div class="hero"><div class="hero-month">'+ml+' '+y+'</div><div class="hero-label">'+(isY?T('saleYear'):T('saleOf',ml))+'</div><div class="hero-number">'+fmtMoney(m.v)+'</div>';
   h+= gV===null ? '<div class="hero-note">'+T('noPy')+'</div>' : '<div class="hero-growth '+gcls(gV)+'">'+fmtG(gV)+' '+T('vsPy',ml,y-1)+'</div>';
   h+='<div class="hero-sub">';
   h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(m.u)+'</div><div class="hero-stat-label">'+T('units')+'</div>'+(gU===null?'':'<div class="hero-stat-growth '+gcls(gU)+'">'+fmtG(gU)+'</div>')+'</div>';
-  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(m.e)+'</div><div class="hero-stat-label">'+T('inv')+'</div>'+(gE===null?'':'<div class="hero-stat-growth '+gcls(gE)+'">'+fmtG(gE)+'</div>')+'</div>';
-  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(w)+'</div><div class="hero-stat-label">'+T('woh')+'</div></div></div>';
-  if(meta) h+='<div class="clasif-line"><span class="ic">'+meta.icon+'</span><span>'+T('classLabel')+': <b>'+esc(meta[LANG])+'</b></span></div>';
+  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(m.e)+'</div><div class="hero-stat-label">'+(isY?T('invAt',last):T('inv'))+'</div>'+(gE===null?'':'<div class="hero-stat-growth '+gcls(gE)+'">'+fmtG(gE)+'</div>')+'</div>';
+  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(w)+'</div><div class="hero-stat-label">'+(isY?T('wohAt',last):T('woh'))+'</div></div></div>';
+  if(meta) h+='<div class="clasif-line"><span class="ic">'+meta.icon+'</span><span>'+(isY?T('classAt',last):T('classLabel'))+': <b>'+esc(meta[LANG])+'</b></span></div>';
   h+='</div>';
   h+='<section><div class="section-head"><div class="section-title">'+T('readTitle')+'</div></div>'+readingBlock()+'</section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('timeline')+'</div><div class="metric-switch">';
   [['v','mSales'],['u','mUnits'],['e','mInv']].forEach(function(x){ h+='<button class="metric-btn'+(st.metric===x[0]?' active':'')+'" data-act="metric" data-m="'+x[0]+'">'+T(x[1])+'</button>'; });
-  h+='</div></div>'+stripBlock()+'<div class="section-note" style="margin-top:6px">'+T('tlNote')+'</div></section>';
+  h+='</div></div><div style="margin-bottom:10px"><button class="metric-btn'+(isY?' active':'')+'" data-act="year">'+T('allYear')+'</button></div>'+stripBlock()+'<div class="section-note" style="margin-top:6px">'+T('tlNote')+'</div></section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('wohTitle')+'</div><div class="section-note">'+T('wohNote')+'</div></div><div class="chart-card">'+wohChart()+'</div></section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('stores')+'</div><div class="section-note">'+ml+' '+y+'</div></div>'+rowsBlock(m.stores,'s',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('stores')+'</div><div class="section-note">'+(isY?T('yearNote',first,last):ml+' '+y)+'</div></div>'+rowsBlock(m.stores,'s',m.v)+'</section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('un')+'</div></div>'+rowsBlock(m.un,'un',m.v)+'</section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('cat')+'</div></div>'+rowsBlock(m.cat,'cat',m.v)+'</section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('gen')+'</div></div>'+rowsBlock(m.gen,'gen',m.v)+'</section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('fam')+'</div><div class="section-note">'+T('famNote')+'</div></div>'+rowsBlock(m.fam,'fam',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('fam')+'</div><div class="section-note">'+T('famNote')+'</div></div>'+rowsBlock(m.fam,'fam',m.v)+(isY?'<div class="section-note" style="margin-top:8px">'+T('yearApprox')+'</div>':'')+'</section>';
   h+='<footer><span>'+T('footL')+'</span><span>'+T('footR',first,last,y)+'</span></footer>';
   document.getElementById('app').innerHTML=h;
   document.documentElement.lang=LANG;
@@ -1858,7 +1879,8 @@ document.getElementById('app').addEventListener('click',function(e){
   var el=e.target; while(el&&el!==this&&!(el.getAttribute&&el.getAttribute('data-act'))) el=el.parentNode;
   if(!el||el===this) return;
   var act=el.getAttribute('data-act');
-  if(act==='month'){ st.p=Number(el.getAttribute('data-p')); }
+  if(act==='month'){ var np=Number(el.getAttribute('data-p')); st.p=(st.p===np)?null:np; }
+  else if(act==='year'){ st.p=null; }
   else if(act==='metric'){ st.metric=el.getAttribute('data-m'); }
   else if(act==='lang'){ LANG=el.getAttribute('data-l'); }
   render();
