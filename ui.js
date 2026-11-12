@@ -1571,54 +1571,44 @@ function buildAnnualData(cliente, year) {
     }
     return n ? sum / n : null;
   };
-  const group = (rows, keyFn) => {
-    const m = {};
-    rows.forEach(r => {
-      const k = keyFn(r);
-      if (!m[k]) m[k] = { k, u: 0, v: 0, e: 0 };
-      m[k].u += r.u; m[k].v += r.v; m[k].e += r.e;
+  const r1 = x => (x === null || x === undefined) ? null : Math.round(x * 10) / 10;
+  const sucs = state.sucursalPeriodo[cliente] || {};
+  const periods = hist.filter(r => Math.floor(r.p / 100) === year).map(r => r.p);
+  // Diccionario de valores (cada nombre se guarda una sola vez) y familias con promedio precalculado
+  const DIMS = ['s', 'un', 'cat', 'gen', 'fam'];
+  const dict = {}, idx = {};
+  DIMS.forEach(d => { dict[d] = []; idx[d] = {}; });
+  const enc = r => {
+    const o = [];
+    DIMS.forEach(d => {
+      const k = r[d];
+      if (idx[d][k] === undefined) { idx[d][k] = dict[d].length; dict[d].push(k); }
+      o.push(idx[d][k]);
     });
-    return m;
+    o.push(Math.round(r.u), Math.round(r.v * 100) / 100, Math.round(r.e));
+    return o;
   };
-  const r0 = x => (x === null || x === undefined) ? null : Math.round(x);
-  const build = (cur, py, dim, avgFilter, limit) => {
-    const pm = group(py, r => r[dim]);
-    let list = Object.values(group(cur, r => r[dim])).sort((a, b) => b.v - a.v);
-    if (limit) list = list.slice(0, limit);
-    return list.map(x => {
-      const p = pm[x.k];
-      const avg = avgFilter(x.k);
-      return { k: x.k, u: r0(x.u), v: r0(x.v), e: r0(x.e), pu: p ? r0(p.u) : null, pv: p ? r0(p.v) : null, avgU: avg === null ? null : Math.round(avg * 10) / 10 };
-    });
-  };
-
+  const famTot = {};
+  periods.forEach(p => rowsFor(p).forEach(r => { famTot[r.fam] = (famTot[r.fam] || 0) + r.v; }));
+  const famSet = new Set(Object.keys(famTot).sort((a, b) => famTot[b] - famTot[a]).slice(0, 25));
   const months = [];
-  hist.filter(r => Math.floor(r.p / 100) === year).forEach(row => {
-    const p = row.p;
+  periods.forEach(p => {
     const m = computeMetricsForPeriod(hist, p);
     if (!m) return;
-    const pyRow = hist.find(r => r.p === p - 100) || null;
     const cur = rowsFor(p), py = rowsFor(p - 100);
-    const sucs = state.sucursalPeriodo[cliente] || {};
-    months.push({
-      p,
-      u: r0(m.unidades), v: r0(m.valor), e: r0(m.existencia),
-      avgU: m.avgUnits === null ? null : Math.round(m.avgUnits * 10) / 10,
-      pu: pyRow ? r0(pyRow.u) : null, pv: pyRow ? r0(pyRow.v) : null, pe: pyRow ? r0(pyRow.e) : null,
-      clasif: m.clasif || null,
-      stores: build(cur, py, 's', s => sucs[s] ? cubeAvgTrailing(sucs[s], {}, p, 12).avg : null, 12),
-      un: build(cur, py, 'un', k => avgTrail({ un: k }, p), 0),
-      gen: build(cur, py, 'gen', k => avgTrail({ gen: k }, p), 0),
-      cat: build(cur, py, 'cat', k => avgTrail({ cat: k }, p), 0),
-      fam: build(cur, py, 'fam', k => avgTrail({ fam: k }, p), 10)
-    });
+    const avg = { a: r1(m.avgUnits), s: {}, un: {}, cat: {}, gen: {}, fam: {} };
+    const seen = d => { const o = {}; cur.forEach(r => { o[r[d]] = 1; }); return Object.keys(o); };
+    seen('s').forEach(s => { avg.s[s] = sucs[s] ? r1(cubeAvgTrailing(sucs[s], {}, p, 12).avg) : null; });
+    ['un', 'cat', 'gen'].forEach(d => seen(d).forEach(k => { avg[d][k] = r1(avgTrail({ [d]: k }, p)); }));
+    seen('fam').filter(k => famSet.has(k)).forEach(k => { avg.fam[k] = r1(avgTrail({ fam: k }, p)); });
+    months.push({ p, clasif: m.clasif || null, avg, r: cur.map(enc), pr: py.map(enc) });
   });
   if (!months.length) return null;
   const clasifMeta = {};
   Object.keys(CLASIFICACIONES).forEach(k => {
     clasifMeta[k] = { icon: CLASIFICACIONES[k].icon, es: classifLabel(k, 'es'), en: classifLabel(k, 'en') };
   });
-  return { cliente, year, months, clasifMeta };
+  return { cliente, year, months, dict, clasifMeta };
 }
 
 function buildAnnualReportHTML(data, lang) {
@@ -1705,6 +1695,24 @@ function buildAnnualReportHTML(data, lang) {
   .row-g{font-family:var(--font-mono); font-weight:600; font-size:11px;}
   .row-woh{font-family:var(--font-mono); font-size:11px; color:var(--steel);}
   .row-share{font-family:var(--font-mono); font-size:11px; color:var(--gold); font-weight:700;}
+  .filter-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; min-height:20px;}
+  .filter-bar-label{font-size:12px; color:var(--text-soft);}
+  .chip{border:1.5px solid var(--ink); background:var(--ink); color:#fff; border-radius:999px; padding:5px 12px; font-size:12.5px; cursor:pointer; font-family:var(--font-body);}
+  .chip b{opacity:0.7; margin-left:4px;}
+  .chip-clear{border:none; background:none; color:var(--steel); text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:var(--font-body);}
+  .row.clk,.ftbl tr.clk{cursor:pointer;}
+  .row.act{border-color:var(--gold); box-shadow:0 0 0 1.5px var(--gold) inset;}
+  .ftbl tr.act td{background:var(--gold-soft);}
+  .ftbl tr.act td.l{background:var(--gold-soft);}
+  .tbl-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch; background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);}
+  .ftbl{border-collapse:collapse; width:100%; min-width:600px; font-size:13px;}
+  .ftbl th{font-family:var(--font-mono); font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-soft); text-align:right; padding:10px 10px; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  .ftbl td{padding:10px 10px; border-bottom:1px solid var(--line); white-space:nowrap; color:var(--ink);}
+  .ftbl tr:last-child td{border-bottom:none;}
+  .ftbl th.l,.ftbl td.l{text-align:left; position:sticky; left:0; background:var(--paper-card); font-weight:600; z-index:1; max-width:150px; overflow:hidden; text-overflow:ellipsis;}
+  .ftbl td.num{text-align:right; font-family:var(--font-mono); font-size:12.5px;}
+  .ftbl td.b{font-weight:700;}
+  .ftbl .stat-low{color:var(--steel);}
   .empty{font-size:13px; color:var(--text-soft); font-style:italic;}
   footer{margin-top:60px; padding-top:18px; border-top:1px solid var(--line); display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-soft); font-family:var(--font-mono); gap:12px; flex-wrap:wrap;}
   @media (max-width:520px){ .hero-sub{gap:22px;} .row-money{font-size:16px;} }
@@ -1722,19 +1730,19 @@ var GENL = { es:{MEN:'Hombre',WOMEN:'Mujer',KIDS:'Niños'}, en:{MEN:'Men',WOMEN:
 var I18N = {
   es:{ eyebrow:'Retail Tour — Resumen del año', saleOf:function(m){return 'Venta de '+m;}, units:'Unidades vendidas', inv:'Unidades en inventario', woh:'Semanas de inventario',
     vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'Sin datos del año anterior para comparar', ytd:function(m,a,b){return 'Acumulado '+a+' – '+b;},
-    classLabel:'Clasificación del mes', readTitle:'Lectura del año', timeline:'Mes a mes', tlNote:'toca un mes para ver su detalle · tócalo de nuevo para volver a todo el año', allYear:'Todo el año', saleYear:'Ventas acumuladas', invAt:function(m){return 'Unidades en inventario (a '+m+')';}, wohAt:function(m){return 'Semanas de inventario (a '+m+')';}, classAt:function(m){return 'Clasificación a '+m;}, yearNote:function(a,b){return 'Acumulado '+a+' – '+b+' · WOH al cierre';}, yearApprox:'Las sucursales y familias suman los meses en que aparecen entre las principales de cada mes.',
+    classLabel:'Clasificación del mes', readTitle:'Lectura del año', timeline:'Mes a mes', tlNote:'toca un mes para ver su detalle · tócalo de nuevo para volver a todo el año', allYear:'Todo el año', filterHint:'toca una sucursal, unidad, categoría, género o familia para filtrar', filterBy:'Filtrando por:', clearAll:'Quitar filtros', noWohCombo:'Con más de un filtro no hay promedio de 12 meses para calcular las semanas de inventario.', saleYear:'Ventas acumuladas', invAt:function(m){return 'Unidades en inventario (a '+m+')';}, wohAt:function(m){return 'Semanas de inventario (a '+m+')';}, classAt:function(m){return 'Clasificación a '+m;}, yearNote:function(a,b){return 'Acumulado '+a+' – '+b+' · WOH al cierre';}, yearApprox:'Las sucursales y familias suman los meses en que aparecen entre las principales de cada mes.',
     mSales:'Ventas', mUnits:'Unidades', mInv:'Inventario', legBar:'Este año', legPy:'Mismo mes del año anterior',
     wohTitle:'Semanas de inventario', wohNote:'zona saludable: 20 a 26 semanas', stores:'Sucursales', un:'Unidad de negocio', cat:'Categoría', gen:'Género', fam:'Familias / siluetas líderes',
-    famNote:'top 10 por ventas', empty:'Sin datos para este mes.', woh1:'WOH', footL:'Preparado con Retail Tour', footR:function(a,b,y){return 'Datos de '+a+' a '+b+' '+y;},
+    famNote:'top 10 por ventas · AA = mismo periodo del año anterior', colFam:'Familia / silueta', colSales:'Ventas', colAA:'vs AA', colMix:'Mix', colUnits:'Unid.', colInv:'Inv.', colWoh:'WOH', empty:'Sin datos para este mes.', woh1:'WOH', footL:'Preparado con Retail Tour', footR:function(a,b,y){return 'Datos de '+a+' a '+b+' '+y;},
     readYtd:function(a,b,v,g,y){return 'De '+a+' a '+b+', las ventas suman '+v+(g===null?'.':' ('+g+' frente al mismo periodo de '+y+').');},
     readBest:function(b,bv,w,wv){return 'El mes más fuerte fue '+b+' ('+bv+') y el más bajo '+w+' ('+wv+').';},
     readWoh:function(a,av,b,bv){return 'Las semanas de inventario pasaron de '+av+' en '+a+' a '+bv+' en '+b+'.';} },
   en:{ eyebrow:'Retail Tour — Year Summary', saleOf:function(m){return m+' sales';}, units:'Units sold', inv:'Units in inventory', woh:'Weeks of inventory',
     vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'No prior-year data to compare', ytd:function(m,a,b){return 'Year to date '+a+' – '+b;},
-    classLabel:'Month classification', readTitle:'Year at a glance', timeline:'Month by month', tlNote:'tap a month to see its detail · tap it again to go back to the full year', allYear:'Full year', saleYear:'Year-to-date sales', invAt:function(m){return 'Units in inventory (at '+m+')';}, wohAt:function(m){return 'Weeks of inventory (at '+m+')';}, classAt:function(m){return 'Classification at '+m;}, yearNote:function(a,b){return 'Cumulative '+a+' – '+b+' · WOH at close';}, yearApprox:'Stores and families add up the months in which they appear among the top of each month.',
+    classLabel:'Month classification', readTitle:'Year at a glance', timeline:'Month by month', tlNote:'tap a month to see its detail · tap it again to go back to the full year', allYear:'Full year', filterHint:'tap a store, unit, category, gender or family to filter', filterBy:'Filtering by:', clearAll:'Clear filters', noWohCombo:'With more than one filter there is no 12-month average to calculate weeks of inventory.', saleYear:'Year-to-date sales', invAt:function(m){return 'Units in inventory (at '+m+')';}, wohAt:function(m){return 'Weeks of inventory (at '+m+')';}, classAt:function(m){return 'Classification at '+m;}, yearNote:function(a,b){return 'Cumulative '+a+' – '+b+' · WOH at close';}, yearApprox:'Stores and families add up the months in which they appear among the top of each month.',
     mSales:'Sales', mUnits:'Units', mInv:'Inventory', legBar:'This year', legPy:'Same month last year',
     wohTitle:'Weeks of inventory', wohNote:'healthy zone: 20 to 26 weeks', stores:'Stores', un:'Business unit', cat:'Category', gen:'Gender', fam:'Leading families / silhouettes',
-    famNote:'top 10 by sales', empty:'No data for this month.', woh1:'WOH', footL:'Prepared with Retail Tour', footR:function(a,b,y){return a+' to '+b+' '+y+' data';},
+    famNote:'top 10 by sales · PY = same period last year', colFam:'Family / silhouette', colSales:'Sales', colAA:'vs PY', colMix:'Mix', colUnits:'Units', colInv:'Inv.', colWoh:'WOH', empty:'No data for this month.', woh1:'WOH', footL:'Prepared with Retail Tour', footR:function(a,b,y){return a+' to '+b+' '+y+' data';},
     readYtd:function(a,b,v,g,y){return 'From '+a+' to '+b+', sales add up to '+v+(g===null?'.':' ('+g+' vs the same period of '+y+').');},
     readBest:function(b,bv,w,wv){return 'The strongest month was '+b+' ('+bv+') and the lowest '+w+' ('+wv+').';},
     readWoh:function(a,av,b,bv){return 'Weeks of inventory moved from '+av+' in '+a+' to '+bv+' in '+b+'.';} }
@@ -1752,48 +1760,90 @@ function gcls(g){ if(g===null) return ''; return g>=0?'stat-pos':'stat-neg'; }
 function wohOf(e,avg){ return (avg&&avg!==0&&e!==null&&e!==undefined)?(e/avg)*4.33:null; }
 function fmtWoh(w){ return w===null?'—':w.toFixed(1); }
 function mname(p,long){ var m=p%100; return (long?MNL:MN)[LANG][m-1]; }
-var M = DATA.months, st = { p:null, metric:'v' };
-function cur(){ for(var i=0;i<M.length;i++){ if(M[i].p===st.p) return M[i]; } return M[M.length-1]; }
-function yearAgg(){
-  var last=M[M.length-1];
-  var Y={p:null,v:0,u:0,mv:0,mu:0,pv:0,pu:0,e:last.e,pe:last.pe,avgU:last.avgU,clasif:last.clasif};
-  M.forEach(function(x){ Y.v+=x.v; Y.u+=x.u; if(x.pv!==null&&x.pv!==undefined){ Y.mv+=x.v; Y.pv+=x.pv; } if(x.pu!==null&&x.pu!==undefined){ Y.mu+=x.u; Y.pu+=x.pu; } });
-  if(!Y.pv) Y.pv=null; if(!Y.pu) Y.pu=null;
-  [['stores',12],['un',0],['cat',0],['gen',0],['fam',10]].forEach(function(d){
-    var map={};
-    M.forEach(function(x){ (x[d[0]]||[]).forEach(function(r){
-      var a=map[r.k]; if(!a) a=map[r.k]={k:r.k,v:0,u:0,mv:0,pv:0,e:null,avgU:null,lp:0};
-      a.v+=r.v; a.u+=r.u; if(r.pv!==null&&r.pv!==undefined){ a.mv+=r.v; a.pv+=r.pv; } a.e=r.e; a.avgU=r.avgU; a.lp=x.p;
-    }); });
-    var list=Object.keys(map).map(function(k){ var a=map[k]; if(!a.pv) a.pv=null; if(a.lp!==last.p){ a.e=null; a.avgU=null; } return a; });
-    list.sort(function(a,b){ return b.v-a.v; });
-    Y[d[0]]=d[1]?list.slice(0,d[1]):list;
+function FLAGS(l){
+  var es='<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#AA151B"/><rect y="5" width="30" height="10" fill="#F1BF00"/></svg>';
+  var us='<svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#FFFFFF"/><rect width="30" height="1.54" fill="#B22234"/><rect y="3.08" width="30" height="1.54" fill="#B22234"/><rect y="6.16" width="30" height="1.54" fill="#B22234"/><rect y="9.24" width="30" height="1.54" fill="#B22234"/><rect y="12.32" width="30" height="1.54" fill="#B22234"/><rect y="15.4" width="30" height="1.54" fill="#B22234"/><rect y="18.46" width="30" height="1.54" fill="#B22234"/><rect width="12" height="10.8" fill="#3C3B6E"/></svg>';
+  return '<button class="lang-flag-btn'+(l==='es'?' active':'')+'" data-act="lang" data-l="es" title="Español" aria-label="Español">'+es+'</button><button class="lang-flag-btn'+(l==='en'?' active':'')+'" data-act="lang" data-l="en" title="English" aria-label="English">'+us+'</button>';
+}
+var D = DATA.dict, DIMS = ['s','un','cat','gen','fam'];
+function decode(a){ return { s:D.s[a[0]], un:D.un[a[1]], cat:D.cat[a[2]], gen:D.gen[a[3]], fam:D.fam[a[4]], u:a[5], v:a[6], e:a[7] }; }
+var M = DATA.months;
+M.forEach(function(m){ m.R=m.r.map(decode); m.P=m.pr.map(decode); });
+var st = { p:null, metric:'v', f:{ s:null, un:null, cat:null, gen:null, fam:null } };
+var MS = [];
+function dimLabel(dim,k){ if(dim==='un') return UNL[LANG][k]||k; if(dim==='gen') return GENL[LANG][k]||k; if(dim==='s') return tc(k); return k; }
+function matchR(r,exclude){ for(var i=0;i<DIMS.length;i++){ var d=DIMS[i]; if(d===exclude) continue; var fv=st.f[d]; if(fv&&r[d]!==fv) return false; } return true; }
+function fr(rows,exclude){ return rows.filter(function(r){ return matchR(r,exclude); }); }
+function sumR(rows){ var a={v:0,u:0,e:0}; for(var i=0;i<rows.length;i++){ a.v+=rows[i].v; a.u+=rows[i].u; a.e+=rows[i].e; } return a; }
+function grp(rows,dim){ var map={}; for(var i=0;i<rows.length;i++){ var r=rows[i], k=r[dim], a=map[k]; if(!a) a=map[k]={v:0,u:0,e:0}; a.v+=r.v; a.u+=r.u; a.e+=r.e; } return map; }
+function nActive(exclude){ var n=0; DIMS.forEach(function(d){ if(d!==exclude&&st.f[d]) n++; }); return n; }
+function anyF(){ return nActive(null)>0; }
+function avgOf(m){ var act=DIMS.filter(function(d){ return st.f[d]; }); if(!act.length) return m.avg.a; if(act.length>1) return null; var mp=m.avg[act[0]], v=mp?mp[st.f[act[0]]]:null; return (v===undefined)?null:v; }
+function computeMS(){
+  MS=M.map(function(m){
+    var c=sumR(fr(m.R,null)), has=m.P.length>0, p=has?sumR(fr(m.P,null)):null, av=avgOf(m);
+    return { p:m.p, v:c.v, u:c.u, e:c.e, hasPy:has, pv:p?p.v:null, pu:p?p.u:null, pe:p?p.e:null, avg:av, woh:wohOf(c.e,av), clasif:m.clasif };
   });
+}
+function cur(){ for(var i=0;i<MS.length;i++){ if(MS[i].p===st.p) return MS[i]; } return MS[MS.length-1]; }
+function curIdx(){ for(var i=0;i<MS.length;i++){ if(MS[i].p===st.p) return i; } return MS.length-1; }
+function yearSum(){
+  var last=MS[MS.length-1], Y={ p:null, v:0, u:0, mv:0, mu:0, pv:0, pu:0, e:last.e, pe:last.pe, woh:last.woh, clasif:last.clasif }, anyPy=false;
+  MS.forEach(function(x){ Y.v+=x.v; Y.u+=x.u; if(x.hasPy){ anyPy=true; Y.mv+=x.v; Y.mu+=x.u; Y.pv+=x.pv; Y.pu+=x.pu; } });
+  if(!anyPy){ Y.pv=null; Y.pu=null; }
   return Y;
 }
-function dimLabel(dim,k){ if(dim==='un') return UNL[LANG][k]||k; if(dim==='gen') return GENL[LANG][k]||k; if(dim==='s') return tc(k); return k; }
+
+function entityList(dim,isY){
+  var acc={}, months=isY?M:[M[curIdx()]], mon=M[isY?M.length-1:curIdx()];
+  months.forEach(function(m){
+    var gc=grp(fr(m.R,dim),dim), gp=m.P.length?grp(fr(m.P,dim),dim):null;
+    Object.keys(gc).forEach(function(k){
+      var a=acc[k]; if(!a) a=acc[k]={k:k,v:0,u:0,mv:0,mu:0,pv:0,pu:0,hasPy:false};
+      a.v+=gc[k].v; a.u+=gc[k].u;
+      if(gp&&gp[k]){ a.hasPy=true; a.mv+=gc[k].v; a.mu+=gc[k].u; a.pv+=gp[k].v; a.pu+=gp[k].u; }
+    });
+  });
+  var ge=grp(fr(mon.R,dim),dim), others=nActive(dim);
+  return Object.keys(acc).map(function(k){
+    var a=acc[k], mp=mon.avg[dim], av=(others===0&&mp&&mp[k]!==undefined)?mp[k]:null;
+    a.e=ge[k]?ge[k].e:null; a.avg=av; a.woh=wohOf(a.e,av);
+    a.gv=a.hasPy?growth(a.mv,a.pv):null; a.gu=a.hasPy?growth(a.mu,a.pu):null;
+    return a;
+  }).filter(function(x){ return x.v>0||x.u>0; }).sort(function(a,b){ return b.v-a.v; });
+}
 
 function rowsBlock(list,dim,total){
-  list=(list||[]).filter(function(x){ return x.v>0||x.u>0; });
   if(!list.length) return '<div class="empty">'+T('empty')+'</div>';
   var h='<div class="rows">';
   list.forEach(function(x){
-    var share=total?x.v/total:0, g=(x.mv!==undefined?growth(x.mv,x.pv):growth(x.v,x.pv)), w=wohOf(x.e,x.avgU);
-    h+='<div class="row"><div class="row-name">'+esc(dimLabel(dim,x.k))+'</div>';
+    var share=total?x.v/total:0, act=st.f[dim]===x.k;
+    h+='<div class="row clk'+(act?' act':'')+'" data-act="flt" data-d="'+dim+'" data-k="'+esc(x.k)+'"><div class="row-name">'+esc(dimLabel(dim,x.k))+'</div>';
     h+='<div class="row-fig"><div class="row-money">'+fmtShort(x.v,'v')+'</div>';
-    h+='<div class="row-g '+gcls(g)+'">'+(g===null?'':fmtG(g))+'</div>';
-    h+='<div class="row-woh">'+T('woh1')+' '+fmtWoh(w)+'</div></div>';
+    h+='<div class="row-g '+gcls(x.gv)+'">'+(x.gv===null?'':fmtG(x.gv))+'</div>';
+    h+='<div class="row-woh">'+T('woh1')+' '+fmtWoh(x.woh)+'</div></div>';
     h+='<div class="row-track"><div class="row-fill" style="width:'+Math.max(2,Math.round(share*100))+'%"></div></div></div>';
   });
   return h+'</div>';
 }
 
+function famTable(list,total){
+  if(!list.length) return '<div class="empty">'+T('empty')+'</div>';
+  function gcell(g){ return '<td class="num '+gcls(g)+'">'+(g===null?'—':fmtG(g))+'</td>'; }
+  var h='<div class="tbl-wrap"><table class="ftbl"><thead><tr><th class="l">'+T('colFam')+'</th><th>'+T('colSales')+'</th><th>'+T('colAA')+'</th><th>'+T('colMix')+'</th><th>'+T('colUnits')+'</th><th>'+T('colAA')+'</th><th>'+T('colInv')+'</th><th>'+T('colWoh')+'</th></tr></thead><tbody>';
+  list.forEach(function(x){
+    var w=x.woh, wc=(w===null)?'':(w>=20&&w<=26?' stat-pos':(w>26?' stat-neg':' stat-low'));
+    h+='<tr class="clk'+(st.f.fam===x.k?' act':'')+'" data-act="flt" data-d="fam" data-k="'+esc(x.k)+'"><td class="l">'+esc(x.k)+'</td><td class="num b">'+fmtMoney(x.v)+'</td>'+gcell(x.gv)+'<td class="num">'+(total?Math.round(x.v/total*100)+'%':'—')+'</td><td class="num">'+fmtUnits(x.u)+'</td>'+gcell(x.gu)+'<td class="num">'+(x.e===null||x.e===undefined?'—':fmtUnits(x.e))+'</td><td class="num'+wc+'">'+fmtWoh(w)+'</td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+
 function stripBlock(){
-  var key=st.metric, pyKey=key==='v'?'pv':key==='u'?'pu':'pe', max=1;
-  M.forEach(function(m){ if(m[key]>max) max=m[key]; if(m[pyKey]>max) max=m[pyKey]; });
+  var key=st.metric, pyKey=key==='v'?'pv':key==='u'?'pu':'pe', max=1, showIc=!anyF();
+  MS.forEach(function(m){ if(m[key]>max) max=m[key]; if(m[pyKey]>max) max=m[pyKey]; });
   var h='<div class="strip">';
-  M.forEach(function(m){
-    var hh=Math.round((m[key]/max)*100), py=m[pyKey], g=growth(m[key],py), meta=m.clasif&&DATA.clasifMeta[m.clasif];
+  MS.forEach(function(m){
+    var hh=Math.round((m[key]/max)*100), py=m[pyKey], g=growth(m[key],py), meta=showIc&&m.clasif&&DATA.clasifMeta[m.clasif];
     h+='<button class="mcol'+(m.p===st.p?' active':'')+'" data-act="month" data-p="'+m.p+'">';
     h+='<div class="mval">'+fmtShort(m[key],key)+'</div>';
     h+='<div class="mbar-area"><div class="mbar" style="height:'+hh+'%"></div>';
@@ -1807,11 +1857,12 @@ function stripBlock(){
 }
 
 function wohChart(){
-  var pts=[],maxW=40;
-  M.forEach(function(m,i){ var w=wohOf(m.e,m.avgU); pts.push(w); if(w!==null&&w>maxW) maxW=w; });
+  var pts=MS.map(function(m){ return m.woh; }), maxW=40, any=false;
+  pts.forEach(function(w){ if(w!==null){ any=true; if(w>maxW) maxW=w; } });
+  if(!any) return '<div class="empty" style="padding:18px">'+T('noWohCombo')+'</div>';
   maxW=Math.ceil((maxW*1.1)/10)*10;
-  var W=520,H=200,pl=30,pr=14,pt=18,pb=30,iw=W-pl-pr,ih=H-pt-pb;
-  function X(i){ return M.length===1?pl+iw/2:pl+(iw*i)/(M.length-1); }
+  var W=520,H=200,pl=30,pr=14,pt=18,pb=30,iw=W-pl-pr,ih=H-pt-pb, n=MS.length;
+  function X(i){ return n===1?pl+iw/2:pl+(iw*i)/(n-1); }
   function Y(v){ return pt+ih-(v/maxW)*ih; }
   var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(T('wohTitle'))+'">';
   s+='<rect x="'+pl+'" y="'+Y(26)+'" width="'+iw+'" height="'+(Y(20)-Y(26))+'" fill="#3E7A4F" opacity="0.13"/>';
@@ -1820,39 +1871,50 @@ function wohChart(){
   pts.forEach(function(w,i){ if(w===null){ started=false; return; } path+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(w).toFixed(1)+' '; started=true; });
   s+='<path d="'+path+'" fill="none" stroke="#3A5A78" stroke-width="2.5" stroke-linejoin="round"/>';
   pts.forEach(function(w,i){
-    var sel=M[i].p===st.p;
-    s+='<text x="'+X(i)+'" y="'+(H-9)+'" font-size="12" text-anchor="middle" fill="'+(sel?'#17202A':'#6B6459')+'" font-family="monospace">'+mname(M[i].p)+'</text>';
+    var sel=MS[i].p===st.p;
+    s+='<text x="'+X(i)+'" y="'+(H-9)+'" font-size="12" text-anchor="middle" fill="'+(sel?'#17202A':'#6B6459')+'" font-family="monospace">'+mname(MS[i].p)+'</text>';
     if(w===null) return;
     s+='<circle cx="'+X(i)+'" cy="'+Y(w)+'" r="'+(sel?7:4)+'" fill="'+(sel?'#C89B3C':'#3A5A78')+'" stroke="#fff" stroke-width="1.5"/>';
-    if(sel||st.p===null||M.length<=6) s+='<text x="'+X(i)+'" y="'+(Y(w)-11)+'" font-size="13" text-anchor="middle" fill="#17202A" font-family="monospace" font-weight="700">'+w.toFixed(1)+'</text>';
+    if(sel||st.p===null||n<=6) s+='<text x="'+X(i)+'" y="'+(Y(w)-11)+'" font-size="13" text-anchor="middle" fill="#17202A" font-family="monospace" font-weight="700">'+w.toFixed(1)+'</text>';
   });
   return s+'</svg>';
 }
 
 function readingBlock(){
   var m=cur(), up=[], i, lines=[];
-  for(i=0;i<M.length;i++){ if(M[i].p<=m.p) up.push(M[i]); }
+  for(i=0;i<MS.length;i++){ if(MS[i].p<=m.p) up.push(MS[i]); }
   var a=mname(up[0].p,true), b=mname(m.p,true), y=DATA.year;
   var sumV=0, sumMatch=0, sumPy=0;
-  up.forEach(function(x){ sumV+=x.v; if(x.pv){ sumMatch+=x.v; sumPy+=x.pv; } });
+  up.forEach(function(x){ sumV+=x.v; if(x.hasPy&&x.pv){ sumMatch+=x.v; sumPy+=x.pv; } });
   var g=sumPy?fmtG((sumMatch-sumPy)/sumPy):null;
   lines.push(T('readYtd',a,b,fmtMoney(sumV),g,y-1));
   if(up.length>=3){
     var best=up[0],low=up[0]; up.forEach(function(x){ if(x.v>best.v) best=x; if(x.v<low.v) low=x; });
     lines.push(T('readBest',mname(best.p,true),fmtMoney(best.v),mname(low.p,true),fmtMoney(low.v)));
   }
-  var w0=wohOf(up[0].e,up[0].avgU), w1=wohOf(m.e,m.avgU);
+  var w0=up[0].woh, w1=m.woh;
   if(up.length>=2&&w0!==null&&w1!==null) lines.push(T('readWoh',mname(up[0].p,true),w0.toFixed(1),b,w1.toFixed(1)));
   return '<div class="reading">'+lines.map(function(l){return '<p>'+esc(l)+'</p>';}).join('')+'</div>';
 }
 
+function chipsBar(){
+  var h='<div class="filter-bar">';
+  var act=DIMS.filter(function(d){ return st.f[d]; });
+  if(!act.length) return h+'<span class="filter-bar-label">'+T('filterHint')+'</span></div>';
+  h+='<span class="filter-bar-label">'+T('filterBy')+'</span>';
+  act.forEach(function(d){ h+='<button class="chip" data-act="clr" data-d="'+d+'">'+esc(dimLabel(d,st.f[d]))+' <b>×</b></button>'; });
+  h+='<button class="chip-clear" data-act="clrall">'+T('clearAll')+'</button></div>';
+  return h;
+}
+
 function render(){
-  var isY=(st.p===null), m=isY?yearAgg():cur(), y=DATA.year, first=mname(M[0].p,true), last=mname(M[M.length-1].p,true), ml=isY?(first===last?first:first+' – '+last):mname(m.p,true);
-  var gV=isY?growth(m.mv,m.pv):growth(m.v,m.pv), gU=isY?growth(m.mu,m.pu):growth(m.u,m.pu), gE=growth(m.e,m.pe), w=wohOf(m.e,m.avgU);
-  var pyWoh=null; // el comparativo de WOH del año anterior requiere su propio promedio; solo se muestra el valor del mes
-  var meta=m.clasif&&DATA.clasifMeta[m.clasif];
+  computeMS();
+  var isY=(st.p===null), m=isY?yearSum():cur(), y=DATA.year, first=mname(M[0].p,true), last=mname(M[M.length-1].p,true), ml=isY?(first===last?first:first+' – '+last):mname(m.p,true);
+  var gV=isY?growth(m.mv,m.pv):growth(m.v,m.pv), gU=isY?growth(m.mu,m.pu):growth(m.u,m.pu), gE=growth(m.e,m.pe), w=m.woh;
+  var meta=!anyF()&&m.clasif&&DATA.clasifMeta[m.clasif];
   var h='<header><div class="brand"><div class="brand-eyebrow">'+T('eyebrow')+'</div><div class="brand-name">'+esc(tc(DATA.cliente))+'</div><div class="brand-period">'+first+' – '+last+' '+y+'</div></div>';
-  h+='<div class="lang-switch"><button class="lang-flag-btn'+(LANG==='es'?' active':'')+'" data-act="lang" data-l="es" title="Español" aria-label="Español"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#AA151B"/><rect y="5" width="30" height="10" fill="#F1BF00"/></svg></button><button class="lang-flag-btn'+(LANG==='en'?' active':'')+'" data-act="lang" data-l="en" title="English" aria-label="English"><svg viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg"><rect width="30" height="20" fill="#FFFFFF"/><rect width="30" height="1.54" fill="#B22234"/><rect y="3.08" width="30" height="1.54" fill="#B22234"/><rect y="6.16" width="30" height="1.54" fill="#B22234"/><rect y="9.24" width="30" height="1.54" fill="#B22234"/><rect y="12.32" width="30" height="1.54" fill="#B22234"/><rect y="15.4" width="30" height="1.54" fill="#B22234"/><rect y="18.46" width="30" height="1.54" fill="#B22234"/><rect width="12" height="10.8" fill="#3C3B6E"/></svg></button></div></header>';
+  h+='<div class="lang-switch">'+FLAGS(LANG)+'</div></header>';
+  h+=chipsBar();
   h+='<div class="hero"><div class="hero-month">'+ml+' '+y+'</div><div class="hero-label">'+(isY?T('saleYear'):T('saleOf',ml))+'</div><div class="hero-number">'+fmtMoney(m.v)+'</div>';
   h+= gV===null ? '<div class="hero-note">'+T('noPy')+'</div>' : '<div class="hero-growth '+gcls(gV)+'">'+fmtG(gV)+' '+T('vsPy',ml,y-1)+'</div>';
   h+='<div class="hero-sub">';
@@ -1866,11 +1928,12 @@ function render(){
   [['v','mSales'],['u','mUnits'],['e','mInv']].forEach(function(x){ h+='<button class="metric-btn'+(st.metric===x[0]?' active':'')+'" data-act="metric" data-m="'+x[0]+'">'+T(x[1])+'</button>'; });
   h+='</div></div><div style="margin-bottom:10px"><button class="metric-btn'+(isY?' active':'')+'" data-act="year">'+T('allYear')+'</button></div>'+stripBlock()+'<div class="section-note" style="margin-top:6px">'+T('tlNote')+'</div></section>';
   h+='<section><div class="section-head"><div class="section-title">'+T('wohTitle')+'</div><div class="section-note">'+T('wohNote')+'</div></div><div class="chart-card">'+wohChart()+'</div></section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('stores')+'</div><div class="section-note">'+(isY?T('yearNote',first,last):ml+' '+y)+'</div></div>'+rowsBlock(m.stores,'s',m.v)+'</section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('un')+'</div></div>'+rowsBlock(m.un,'un',m.v)+'</section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('cat')+'</div></div>'+rowsBlock(m.cat,'cat',m.v)+'</section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('gen')+'</div></div>'+rowsBlock(m.gen,'gen',m.v)+'</section>';
-  h+='<section><div class="section-head"><div class="section-title">'+T('fam')+'</div><div class="section-note">'+T('famNote')+'</div></div>'+rowsBlock(m.fam,'fam',m.v)+(isY?'<div class="section-note" style="margin-top:8px">'+T('yearApprox')+'</div>':'')+'</section>';
+  var tot=m.v||1;
+  h+='<section><div class="section-head"><div class="section-title">'+T('stores')+'</div><div class="section-note">'+(isY?T('yearNote',first,last):ml+' '+y)+'</div></div>'+rowsBlock(entityList('s',isY),'s',tot)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('un')+'</div></div>'+rowsBlock(entityList('un',isY),'un',tot)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('cat')+'</div></div>'+rowsBlock(entityList('cat',isY).slice(0,10),'cat',tot)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('gen')+'</div></div>'+rowsBlock(entityList('gen',isY),'gen',tot)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('fam')+'</div><div class="section-note">'+T('famNote')+'</div></div>'+famTable(entityList('fam',isY).slice(0,10),tot)+'</section>';
   h+='<footer><span>'+T('footL')+'</span><span>'+T('footR',first,last,y)+'</span></footer>';
   document.getElementById('app').innerHTML=h;
   document.documentElement.lang=LANG;
@@ -1883,6 +1946,9 @@ document.getElementById('app').addEventListener('click',function(e){
   else if(act==='year'){ st.p=null; }
   else if(act==='metric'){ st.metric=el.getAttribute('data-m'); }
   else if(act==='lang'){ LANG=el.getAttribute('data-l'); }
+  else if(act==='flt'){ var d=el.getAttribute('data-d'), k=el.getAttribute('data-k'); st.f[d]=(st.f[d]===k)?null:k; }
+  else if(act==='clr'){ st.f[el.getAttribute('data-d')]=null; }
+  else if(act==='clrall'){ DIMS.forEach(function(d){ st.f[d]=null; }); }
   render();
 });
 render();
