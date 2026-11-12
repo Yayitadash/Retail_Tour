@@ -1186,7 +1186,7 @@ function attachHandlers() {
   if (prevBtn) prevBtn.addEventListener('click', () => shiftPeriod(-1));
   if (nextBtn) nextBtn.addEventListener('click', () => shiftPeriod(1));
   const downloadBtn = document.getElementById('downloadReportBtn');
-  if (downloadBtn) downloadBtn.addEventListener('click', () => downloadAccountReport(state.cliente, state.periodo));
+  if (downloadBtn) downloadBtn.addEventListener('click', () => askWhichReport(state.cliente, state.periodo));
 
   const anotherStoreBtn = document.getElementById('anotherStoreBtn');
   if (anotherStoreBtn) anotherStoreBtn.addEventListener('click', async () => {
@@ -1272,6 +1272,39 @@ function attachHandlers() {
 // la app. Mismo espíritu que el reporte individual (Gold Medal), con
 // filtros combinables de sucursal/UN/categoría/género.
 // ============================================================
+// El botón de descarga pregunta qué se quiere: el reporte del mes que se está
+// viendo o el monitor del año (enero → último mes con datos), un archivo por cuenta.
+function askWhichReport(cliente, periodo) {
+  if (document.getElementById('dlChoiceOverlay')) return;
+  const year = Math.floor(periodo / 100);
+  const overlay = document.createElement('div');
+  overlay.id = 'dlChoiceOverlay';
+  overlay.className = 'dl-choice-overlay';
+  overlay.innerHTML = `
+    <div class="dl-choice-card" role="dialog" aria-modal="true">
+      <div class="dl-choice-title">${L('dlChoiceTitle')}</div>
+      <button class="dl-choice-btn" data-choice="month">
+        <span class="dl-choice-name">${L('dlMonthly')}</span>
+        <span class="dl-choice-sub">${L('dlMonthlySub', periodoLabelI18n(periodo, state.lang))}</span>
+      </button>
+      <button class="dl-choice-btn" data-choice="year">
+        <span class="dl-choice-name">${L('dlAnnual')}</span>
+        <span class="dl-choice-sub">${L('dlAnnualSub', year)}</span>
+      </button>
+      <button class="dl-choice-cancel" data-choice="cancel">${L('dlCancel')}</button>
+    </div>`;
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => {
+    const btn = e.target.closest('[data-choice]');
+    if (!btn && e.target !== overlay) return;
+    const choice = btn ? btn.getAttribute('data-choice') : 'cancel';
+    close();
+    if (choice === 'month') downloadAccountReport(cliente, periodo);
+    else if (choice === 'year') downloadAnnualReport(cliente, periodo);
+  });
+  document.body.appendChild(overlay);
+}
+
 // Copia estática del reporte: el reporte descargable se dibuja con JavaScript,
 // y hay entornos (vista previa de correo o de WhatsApp en el celular, filtros
 // de seguridad de correo que eliminan scripts, políticas de empresa) donde esos
@@ -1504,6 +1537,373 @@ async function downloadAccountReport(cliente, periodo) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+}
+
+
+// ============================================================
+// RESUMEN ANUAL de una cuenta (un archivo por cuenta, enero → último mes con datos)
+// Línea de tiempo mensual interactiva + desglose del mes que se toque.
+// Comparte las mismas reglas de WOH del reporte mensual: existencia del mes ÷
+// promedio de unidades de los últimos 12 meses (solo meses con data) × 4.33.
+// ============================================================
+
+// Arma los datos del año de UNA cuenta: un registro por mes con totales, comparativo
+// contra el mismo mes del año anterior y desglose por sucursal / UN / género /
+// categoría / familia (con su propio promedio de 12 meses para el WOH).
+function buildAnnualData(cliente, year) {
+  const cd = state.clientePeriodo[cliente];
+  if (!cd || !cd.hist.length) return null;
+  const hist = cd.hist.slice().sort((a, b) => a.p - b.p);
+  const activeSet = new Set(hist.map(r => r.p));
+  const rowsCache = {};
+  const rowsFor = p => {
+    const k = String(p);
+    if (!rowsCache[k]) rowsCache[k] = getClientCubeRowsWithStore(cliente, p);
+    return rowsCache[k];
+  };
+  const avgTrail = (filters, p) => {
+    let sum = 0, n = 0;
+    for (let k = 0; k < 12; k++) {
+      const q = periodoAddMonths(p, -k);
+      if (!activeSet.has(q)) continue;
+      n++;
+      sum += cubeTotals(cubeFilterRows(rowsFor(q), filters)).u;
+    }
+    return n ? sum / n : null;
+  };
+  const group = (rows, keyFn) => {
+    const m = {};
+    rows.forEach(r => {
+      const k = keyFn(r);
+      if (!m[k]) m[k] = { k, u: 0, v: 0, e: 0 };
+      m[k].u += r.u; m[k].v += r.v; m[k].e += r.e;
+    });
+    return m;
+  };
+  const r0 = x => (x === null || x === undefined) ? null : Math.round(x);
+  const build = (cur, py, dim, avgFilter, limit) => {
+    const pm = group(py, r => r[dim]);
+    let list = Object.values(group(cur, r => r[dim])).sort((a, b) => b.v - a.v);
+    if (limit) list = list.slice(0, limit);
+    return list.map(x => {
+      const p = pm[x.k];
+      const avg = avgFilter(x.k);
+      return { k: x.k, u: r0(x.u), v: r0(x.v), e: r0(x.e), pu: p ? r0(p.u) : null, pv: p ? r0(p.v) : null, avgU: avg === null ? null : Math.round(avg * 10) / 10 };
+    });
+  };
+
+  const months = [];
+  hist.filter(r => Math.floor(r.p / 100) === year).forEach(row => {
+    const p = row.p;
+    const m = computeMetricsForPeriod(hist, p);
+    if (!m) return;
+    const pyRow = hist.find(r => r.p === p - 100) || null;
+    const cur = rowsFor(p), py = rowsFor(p - 100);
+    const sucs = state.sucursalPeriodo[cliente] || {};
+    months.push({
+      p,
+      u: r0(m.unidades), v: r0(m.valor), e: r0(m.existencia),
+      avgU: m.avgUnits === null ? null : Math.round(m.avgUnits * 10) / 10,
+      pu: pyRow ? r0(pyRow.u) : null, pv: pyRow ? r0(pyRow.v) : null, pe: pyRow ? r0(pyRow.e) : null,
+      clasif: m.clasif || null,
+      stores: build(cur, py, 's', s => sucs[s] ? cubeAvgTrailing(sucs[s], {}, p, 12).avg : null, 12),
+      un: build(cur, py, 'un', k => avgTrail({ un: k }, p), 0),
+      gen: build(cur, py, 'gen', k => avgTrail({ gen: k }, p), 0),
+      cat: build(cur, py, 'cat', k => avgTrail({ cat: k }, p), 0),
+      fam: build(cur, py, 'fam', k => avgTrail({ fam: k }, p), 10)
+    });
+  });
+  if (!months.length) return null;
+  const clasifMeta = {};
+  Object.keys(CLASIFICACIONES).forEach(k => {
+    clasifMeta[k] = { icon: CLASIFICACIONES[k].icon, es: classifLabel(k, 'es'), en: classifLabel(k, 'en') };
+  });
+  return { cliente, year, months, clasifMeta };
+}
+
+function buildAnnualReportHTML(data, lang) {
+  const initialLang = lang === 'en' ? 'en' : 'es';
+  const dataJson = JSON.stringify(Object.assign({ lang: initialLang }, data)).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html>
+<html lang="${initialLang}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${titleCase(data.cliente)} ${data.year} — Retail Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  @font-face{ font-family:'Helvetica Now Display'; font-weight:800; font-style:normal; font-display:swap; src:url(data:font/woff2;base64,${HND_XBOLD_B64}) format('woff2'); }
+  @font-face{ font-family:'Helvetica Now Display'; font-weight:700; font-style:normal; font-display:swap; src:url(data:font/woff2;base64,${HND_BOLD_B64}) format('woff2'); }
+  :root{
+    --paper:#F6F3EC; --paper-card:#FFFFFF; --ink:#17202A; --text:#2A322D; --text-soft:#6B6459;
+    --line:#E4DFD3; --gold:#C89B3C; --gold-soft:#EDE0C2; --steel:#3A5A78; --red:#B4432F; --green:#3E7A4F;
+    --radius:14px; --font-display:'Helvetica Now Display',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--text); font-family:var(--font-body); line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px; margin:0 auto; padding:0 20px 80px;}
+  header{display:flex; justify-content:space-between; align-items:flex-start; padding:32px 0 24px; border-bottom:2px solid var(--ink); gap:16px; flex-wrap:wrap;}
+  .brand{display:flex; flex-direction:column; gap:2px;}
+  .brand-eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:0.06em; color:var(--gold); text-transform:uppercase;}
+  .brand-name{font-family:var(--font-display); font-weight:800; font-size:clamp(40px,10vw,102px); color:var(--ink); line-height:0.9; text-transform:uppercase; letter-spacing:-0.01em;}
+  .brand-period{font-size:14px; color:var(--text-soft); margin-top:4px;}
+  .lang-switch{display:flex; gap:6px;}
+  .lang-btn{border:1.5px solid var(--line); background:var(--paper-card); padding:5px 10px; border-radius:8px; cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--text-soft);}
+  .lang-btn.active{border-color:var(--ink); color:var(--ink); font-weight:600;}
+  .hero{padding:30px 0 8px; text-align:center;}
+  .hero-month{font-family:var(--font-mono); font-size:12px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gold);}
+  .hero-label{font-size:14px; color:var(--text-soft); margin:6px 0 8px;}
+  .hero-number{font-family:var(--font-display); font-weight:800; font-size:clamp(52px,12vw,96px); color:var(--ink); line-height:1;}
+  .hero-growth{font-family:var(--font-mono); font-weight:600; font-size:16px; margin-top:10px;}
+  .hero-note{font-size:12.5px; color:var(--text-soft); font-style:italic; margin-top:8px;}
+  .hero-sub{display:flex; justify-content:center; gap:34px; margin-top:24px; flex-wrap:wrap;}
+  .hero-stat{text-align:center;}
+  .hero-stat-value{font-family:var(--font-mono); font-weight:500; font-size:28px; color:var(--ink);}
+  .hero-stat-label{font-size:13px; color:var(--text-soft); margin-top:2px;}
+  .hero-stat-growth{font-family:var(--font-mono); font-weight:600; font-size:11.5px; margin-top:2px;}
+  .clasif-line{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:20px; font-size:14px; color:var(--text-soft);}
+  .clasif-line .ic{font-size:18px;}
+  .clasif-line b{color:var(--ink);}
+  .stat-pos{color:var(--green);} .stat-neg{color:var(--red);}
+  section{margin-top:44px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
+  .section-title{font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--ink); text-transform:uppercase; letter-spacing:-0.005em;}
+  .section-note{font-size:12px; color:var(--text-soft);}
+  .reading{background:var(--paper-card); border:1.5px solid var(--line); border-radius:var(--radius); padding:16px 18px; display:flex; flex-direction:column; gap:8px;}
+  .reading p{margin:0; font-size:14px; color:var(--text);}
+  .metric-switch{display:flex; gap:6px;}
+  .metric-btn{border:1.5px solid var(--line); background:var(--paper-card); padding:5px 12px; border-radius:20px; cursor:pointer; font-family:var(--font-mono); font-size:11.5px; color:var(--text-soft);}
+  .metric-btn.active{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .strip{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px;}
+  .mcol{flex:1 0 54px; display:flex; flex-direction:column; align-items:center; gap:4px; background:var(--paper-card); border:1.5px solid var(--line); border-radius:12px; padding:8px 4px 8px; cursor:pointer; font-family:inherit; color:inherit;}
+  .mcol:hover{border-color:var(--gold-soft);}
+  .mcol.active{border-color:var(--gold); background:color-mix(in srgb, var(--gold) 7%, white);}
+  .mval{font-family:var(--font-mono); font-size:10.5px; color:var(--ink); font-weight:600; height:14px;}
+  .mbar-area{position:relative; width:100%; height:120px; display:flex; align-items:flex-end; justify-content:center;}
+  .mbar{width:62%; background:var(--gold); border-radius:5px 5px 0 0; min-height:2px;}
+  .mpy{position:absolute; left:8%; right:8%; border-top:2px dashed var(--steel);}
+  .mname{font-family:var(--font-mono); font-size:11px; color:var(--text-soft); text-transform:uppercase;}
+  .mg{font-family:var(--font-mono); font-size:10px; font-weight:600; height:12px;}
+  .mic{font-size:15px; height:20px;}
+  .legend{display:flex; gap:16px; margin-top:8px; font-size:11.5px; color:var(--text-soft); flex-wrap:wrap;}
+  .legend i{display:inline-block; width:14px; height:0; border-top:2px dashed var(--steel); vertical-align:middle; margin-right:6px;}
+  .legend b{display:inline-block; width:10px; height:10px; background:var(--gold); border-radius:2px; vertical-align:middle; margin-right:6px;}
+  .chart-card{background:var(--paper-card); border:1.5px solid var(--line); border-radius:var(--radius); padding:12px 8px 6px;}
+  .chart-card svg{display:block; width:100%; height:auto;}
+  .rows{display:flex; flex-direction:column; gap:9px;}
+  .row{display:grid; grid-template-columns:1fr 96px; align-items:center; gap:10px 14px; background:var(--paper-card); border:1.5px solid var(--line); border-radius:var(--radius); padding:12px 16px;}
+  .row-name{font-weight:600; font-size:14px; color:var(--ink); min-width:0; overflow-wrap:anywhere;}
+  .row-track{grid-column:1; background:var(--paper); border-radius:6px; height:7px; overflow:hidden;}
+  .row-fill{background:var(--gold); height:100%; border-radius:6px;}
+  .row-fig{grid-row:1 / span 2; grid-column:2; text-align:right; white-space:nowrap;}
+  .row-money{font-family:var(--font-mono); font-weight:700; font-size:18px; color:var(--ink);}
+  .row-g{font-family:var(--font-mono); font-weight:600; font-size:11px;}
+  .row-woh{font-family:var(--font-mono); font-size:11px; color:var(--steel);}
+  .row-share{font-family:var(--font-mono); font-size:11px; color:var(--gold); font-weight:700;}
+  .empty{font-size:13px; color:var(--text-soft); font-style:italic;}
+  footer{margin-top:60px; padding-top:18px; border-top:1px solid var(--line); display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-soft); font-family:var(--font-mono); gap:12px; flex-wrap:wrap;}
+  @media (max-width:520px){ .hero-sub{gap:22px;} .row-money{font-size:16px;} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+var DATA = ${dataJson};
+var LANG = DATA.lang || 'es';
+var MN = { es:['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'], en:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] };
+var MNL = { es:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'], en:['January','February','March','April','May','June','July','August','September','October','November','December'] };
+var UNL = { es:{FW:'Calzado',APP:'Ropa',EQ:'Equipo',LIC:'Licencias'}, en:{FW:'Footwear',APP:'Apparel',EQ:'Equipment',LIC:'Licensed'} };
+var GENL = { es:{MEN:'Hombre',WOMEN:'Mujer',KIDS:'Niños'}, en:{MEN:'Men',WOMEN:'Women',KIDS:'Kids'} };
+var I18N = {
+  es:{ eyebrow:'Retail Tour — Resumen del año', saleOf:function(m){return 'Venta de '+m;}, units:'Unidades vendidas', inv:'Unidades en inventario', woh:'Semanas de inventario',
+    vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'Sin datos del año anterior para comparar', ytd:function(m,a,b){return 'Acumulado '+a+' – '+b;},
+    classLabel:'Clasificación del mes', readTitle:'Lectura del año', timeline:'Mes a mes', tlNote:'toca un mes para ver su detalle',
+    mSales:'Ventas', mUnits:'Unidades', mInv:'Inventario', legBar:'Este año', legPy:'Mismo mes del año anterior',
+    wohTitle:'Semanas de inventario', wohNote:'zona saludable: 20 a 26 semanas', stores:'Sucursales', un:'Unidad de negocio', cat:'Categoría', gen:'Género', fam:'Familias / siluetas líderes',
+    famNote:'top 10 por ventas', empty:'Sin datos para este mes.', woh1:'WOH', footL:'Preparado con Retail Tour', footR:function(a,b,y){return 'Datos de '+a+' a '+b+' '+y;},
+    readYtd:function(a,b,v,g,y){return 'De '+a+' a '+b+', las ventas suman '+v+(g===null?'.':' ('+g+' frente al mismo periodo de '+y+').');},
+    readBest:function(b,bv,w,wv){return 'El mes más fuerte fue '+b+' ('+bv+') y el más bajo '+w+' ('+wv+').';},
+    readWoh:function(a,av,b,bv){return 'Las semanas de inventario pasaron de '+av+' en '+a+' a '+bv+' en '+b+'.';} },
+  en:{ eyebrow:'Retail Tour — Year Summary', saleOf:function(m){return m+' sales';}, units:'Units sold', inv:'Units in inventory', woh:'Weeks of inventory',
+    vsPy:function(m,y){return 'vs '+m+' '+y;}, noPy:'No prior-year data to compare', ytd:function(m,a,b){return 'Year to date '+a+' – '+b;},
+    classLabel:'Month classification', readTitle:'Year at a glance', timeline:'Month by month', tlNote:'tap a month to see its detail',
+    mSales:'Sales', mUnits:'Units', mInv:'Inventory', legBar:'This year', legPy:'Same month last year',
+    wohTitle:'Weeks of inventory', wohNote:'healthy zone: 20 to 26 weeks', stores:'Stores', un:'Business unit', cat:'Category', gen:'Gender', fam:'Leading families / silhouettes',
+    famNote:'top 10 by sales', empty:'No data for this month.', woh1:'WOH', footL:'Prepared with Retail Tour', footR:function(a,b,y){return a+' to '+b+' '+y+' data';},
+    readYtd:function(a,b,v,g,y){return 'From '+a+' to '+b+', sales add up to '+v+(g===null?'.':' ('+g+' vs the same period of '+y+').');},
+    readBest:function(b,bv,w,wv){return 'The strongest month was '+b+' ('+bv+') and the lowest '+w+' ('+wv+').';},
+    readWoh:function(a,av,b,bv){return 'Weeks of inventory moved from '+av+' in '+a+' to '+bv+' in '+b+'.';} }
+};
+function T(k){ var v=I18N[LANG][k]; if(typeof v==='function'){ return v.apply(null,Array.prototype.slice.call(arguments,1)); } return v; }
+function esc(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function tc(s){ if(!s) return s; var l=String(s).toLowerCase(),o='',i,prev; for(i=0;i<l.length;i++){ prev=i===0?' ':l.charAt(i-1); o+=(prev===' '||prev==='/'||prev==='#')?l.charAt(i).toUpperCase():l.charAt(i); } return o; }
+function loc(){ return LANG==='es'?'es-US':'en-US'; }
+function fmtMoney(v){ return '$'+Math.round(v).toLocaleString(loc()); }
+function fmtShort(v,metric){ if(v===null||v===undefined) return ''; var a=Math.abs(v); if(metric==='v'){ if(a>=1000000) return '$'+(a/1000000).toFixed(1)+'M'; if(a>=1000) return '$'+Math.round(a/1000)+'K'; return '$'+Math.round(a); } if(a>=1000000) return (a/1000000).toFixed(1)+'M'; if(a>=1000) return (a/1000).toFixed(a>=10000?0:1)+'K'; return String(Math.round(a)); }
+function fmtUnits(v){ return Math.round(v).toLocaleString(loc()); }
+function growth(cur,py){ if(py===null||py===undefined||!py) return null; return (cur-py)/Math.abs(py); }
+function fmtG(g){ if(g===null) return null; var p=Math.round(g*100); return (p>0?'+':'')+p+'%'; }
+function gcls(g){ if(g===null) return ''; return g>=0?'stat-pos':'stat-neg'; }
+function wohOf(e,avg){ return (avg&&avg!==0&&e!==null&&e!==undefined)?(e/avg)*4.33:null; }
+function fmtWoh(w){ return w===null?'—':w.toFixed(1); }
+function mname(p,long){ var m=p%100; return (long?MNL:MN)[LANG][m-1]; }
+var M = DATA.months, st = { p:M[M.length-1].p, metric:'v' };
+function cur(){ for(var i=0;i<M.length;i++){ if(M[i].p===st.p) return M[i]; } return M[M.length-1]; }
+function dimLabel(dim,k){ if(dim==='un') return UNL[LANG][k]||k; if(dim==='gen') return GENL[LANG][k]||k; if(dim==='s') return tc(k); return k; }
+
+function rowsBlock(list,dim,total){
+  list=(list||[]).filter(function(x){ return x.v>0||x.u>0; });
+  if(!list.length) return '<div class="empty">'+T('empty')+'</div>';
+  var h='<div class="rows">';
+  list.forEach(function(x){
+    var share=total?x.v/total:0, g=growth(x.v,x.pv), w=wohOf(x.e,x.avgU);
+    h+='<div class="row"><div class="row-name">'+esc(dimLabel(dim,x.k))+'</div>';
+    h+='<div class="row-fig"><div class="row-money">'+fmtShort(x.v,'v')+'</div>';
+    h+='<div class="row-g '+gcls(g)+'">'+(g===null?'':fmtG(g))+'</div>';
+    h+='<div class="row-woh">'+T('woh1')+' '+fmtWoh(w)+'</div></div>';
+    h+='<div class="row-track"><div class="row-fill" style="width:'+Math.max(2,Math.round(share*100))+'%"></div></div></div>';
+  });
+  return h+'</div>';
+}
+
+function stripBlock(){
+  var key=st.metric, pyKey=key==='v'?'pv':key==='u'?'pu':'pe', max=1;
+  M.forEach(function(m){ if(m[key]>max) max=m[key]; if(m[pyKey]>max) max=m[pyKey]; });
+  var h='<div class="strip">';
+  M.forEach(function(m){
+    var hh=Math.round((m[key]/max)*100), py=m[pyKey], g=growth(m[key],py), meta=m.clasif&&DATA.clasifMeta[m.clasif];
+    h+='<button class="mcol'+(m.p===st.p?' active':'')+'" data-act="month" data-p="'+m.p+'">';
+    h+='<div class="mval">'+fmtShort(m[key],key)+'</div>';
+    h+='<div class="mbar-area"><div class="mbar" style="height:'+hh+'%"></div>';
+    if(py!==null&&py!==undefined) h+='<div class="mpy" style="bottom:'+Math.round((py/max)*100)+'%"></div>';
+    h+='</div><div class="mname">'+mname(m.p)+'</div>';
+    h+='<div class="mg '+gcls(g)+'">'+(g===null?'':fmtG(g))+'</div>';
+    h+='<div class="mic">'+(meta?meta.icon:'')+'</div></button>';
+  });
+  h+='</div><div class="legend"><span><b></b>'+T('legBar')+'</span><span><i></i>'+T('legPy')+'</span></div>';
+  return h;
+}
+
+function wohChart(){
+  var pts=[],maxW=40;
+  M.forEach(function(m,i){ var w=wohOf(m.e,m.avgU); pts.push(w); if(w!==null&&w>maxW) maxW=w; });
+  maxW=Math.ceil((maxW*1.1)/10)*10;
+  var W=520,H=200,pl=30,pr=14,pt=18,pb=30,iw=W-pl-pr,ih=H-pt-pb;
+  function X(i){ return M.length===1?pl+iw/2:pl+(iw*i)/(M.length-1); }
+  function Y(v){ return pt+ih-(v/maxW)*ih; }
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(T('wohTitle'))+'">';
+  s+='<rect x="'+pl+'" y="'+Y(26)+'" width="'+iw+'" height="'+(Y(20)-Y(26))+'" fill="#3E7A4F" opacity="0.13"/>';
+  [0,20,26,maxW].forEach(function(t){ s+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(t)+'" y2="'+Y(t)+'" stroke="#E4DFD3" stroke-width="1"/>'; if(t!==26) s+='<text x="'+(pl-6)+'" y="'+(Y(t)+4)+'" font-size="12" text-anchor="end" fill="#6B6459" font-family="monospace">'+t+'</text>'; });
+  var path='',started=false;
+  pts.forEach(function(w,i){ if(w===null){ started=false; return; } path+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(w).toFixed(1)+' '; started=true; });
+  s+='<path d="'+path+'" fill="none" stroke="#3A5A78" stroke-width="2.5" stroke-linejoin="round"/>';
+  pts.forEach(function(w,i){
+    var sel=M[i].p===st.p;
+    s+='<text x="'+X(i)+'" y="'+(H-9)+'" font-size="12" text-anchor="middle" fill="'+(sel?'#17202A':'#6B6459')+'" font-family="monospace">'+mname(M[i].p)+'</text>';
+    if(w===null) return;
+    s+='<circle cx="'+X(i)+'" cy="'+Y(w)+'" r="'+(sel?7:4)+'" fill="'+(sel?'#C89B3C':'#3A5A78')+'" stroke="#fff" stroke-width="1.5"/>';
+    if(sel||M.length<=6) s+='<text x="'+X(i)+'" y="'+(Y(w)-11)+'" font-size="13" text-anchor="middle" fill="#17202A" font-family="monospace" font-weight="700">'+w.toFixed(1)+'</text>';
+  });
+  return s+'</svg>';
+}
+
+function readingBlock(){
+  var m=cur(), up=[], i, lines=[];
+  for(i=0;i<M.length;i++){ if(M[i].p<=m.p) up.push(M[i]); }
+  var a=mname(up[0].p,true), b=mname(m.p,true), y=DATA.year;
+  var sumV=0, sumMatch=0, sumPy=0;
+  up.forEach(function(x){ sumV+=x.v; if(x.pv){ sumMatch+=x.v; sumPy+=x.pv; } });
+  var g=sumPy?fmtG((sumMatch-sumPy)/sumPy):null;
+  lines.push(T('readYtd',a,b,fmtMoney(sumV),g,y-1));
+  if(up.length>=3){
+    var best=up[0],low=up[0]; up.forEach(function(x){ if(x.v>best.v) best=x; if(x.v<low.v) low=x; });
+    lines.push(T('readBest',mname(best.p,true),fmtMoney(best.v),mname(low.p,true),fmtMoney(low.v)));
+  }
+  var w0=wohOf(up[0].e,up[0].avgU), w1=wohOf(m.e,m.avgU);
+  if(up.length>=2&&w0!==null&&w1!==null) lines.push(T('readWoh',mname(up[0].p,true),w0.toFixed(1),b,w1.toFixed(1)));
+  return '<div class="reading">'+lines.map(function(l){return '<p>'+esc(l)+'</p>';}).join('')+'</div>';
+}
+
+function render(){
+  var m=cur(), y=DATA.year, ml=mname(m.p,true), first=mname(M[0].p,true), last=mname(M[M.length-1].p,true);
+  var gV=growth(m.v,m.pv), gU=growth(m.u,m.pu), gE=growth(m.e,m.pe), w=wohOf(m.e,m.avgU);
+  var pyWoh=null; // el comparativo de WOH del año anterior requiere su propio promedio; solo se muestra el valor del mes
+  var meta=m.clasif&&DATA.clasifMeta[m.clasif];
+  var h='<header><div class="brand"><div class="brand-eyebrow">'+T('eyebrow')+'</div><div class="brand-name">'+esc(tc(DATA.cliente))+'</div><div class="brand-period">'+first+' – '+last+' '+y+'</div></div>';
+  h+='<div class="lang-switch"><button class="lang-btn'+(LANG==='es'?' active':'')+'" data-act="lang" data-l="es">ES</button><button class="lang-btn'+(LANG==='en'?' active':'')+'" data-act="lang" data-l="en">EN</button></div></header>';
+  h+='<div class="hero"><div class="hero-month">'+ml+' '+y+'</div><div class="hero-label">'+T('saleOf',ml)+'</div><div class="hero-number">'+fmtMoney(m.v)+'</div>';
+  h+= gV===null ? '<div class="hero-note">'+T('noPy')+'</div>' : '<div class="hero-growth '+gcls(gV)+'">'+fmtG(gV)+' '+T('vsPy',ml,y-1)+'</div>';
+  h+='<div class="hero-sub">';
+  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(m.u)+'</div><div class="hero-stat-label">'+T('units')+'</div>'+(gU===null?'':'<div class="hero-stat-growth '+gcls(gU)+'">'+fmtG(gU)+'</div>')+'</div>';
+  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtUnits(m.e)+'</div><div class="hero-stat-label">'+T('inv')+'</div>'+(gE===null?'':'<div class="hero-stat-growth '+gcls(gE)+'">'+fmtG(gE)+'</div>')+'</div>';
+  h+='<div class="hero-stat"><div class="hero-stat-value">'+fmtWoh(w)+'</div><div class="hero-stat-label">'+T('woh')+'</div></div></div>';
+  if(meta) h+='<div class="clasif-line"><span class="ic">'+meta.icon+'</span><span>'+T('classLabel')+': <b>'+esc(meta[LANG])+'</b></span></div>';
+  h+='</div>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('readTitle')+'</div></div>'+readingBlock()+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('timeline')+'</div><div class="metric-switch">';
+  [['v','mSales'],['u','mUnits'],['e','mInv']].forEach(function(x){ h+='<button class="metric-btn'+(st.metric===x[0]?' active':'')+'" data-act="metric" data-m="'+x[0]+'">'+T(x[1])+'</button>'; });
+  h+='</div></div>'+stripBlock()+'<div class="section-note" style="margin-top:6px">'+T('tlNote')+'</div></section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('wohTitle')+'</div><div class="section-note">'+T('wohNote')+'</div></div><div class="chart-card">'+wohChart()+'</div></section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('stores')+'</div><div class="section-note">'+ml+' '+y+'</div></div>'+rowsBlock(m.stores,'s',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('un')+'</div></div>'+rowsBlock(m.un,'un',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('cat')+'</div></div>'+rowsBlock(m.cat,'cat',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('gen')+'</div></div>'+rowsBlock(m.gen,'gen',m.v)+'</section>';
+  h+='<section><div class="section-head"><div class="section-title">'+T('fam')+'</div><div class="section-note">'+T('famNote')+'</div></div>'+rowsBlock(m.fam,'fam',m.v)+'</section>';
+  h+='<footer><span>'+T('footL')+'</span><span>'+T('footR',first,last,y)+'</span></footer>';
+  document.getElementById('app').innerHTML=h;
+  document.documentElement.lang=LANG;
+}
+document.getElementById('app').addEventListener('click',function(e){
+  var el=e.target; while(el&&el!==this&&!(el.getAttribute&&el.getAttribute('data-act'))) el=el.parentNode;
+  if(!el||el===this) return;
+  var act=el.getAttribute('data-act');
+  if(act==='month'){ st.p=Number(el.getAttribute('data-p')); }
+  else if(act==='metric'){ st.metric=el.getAttribute('data-m'); }
+  else if(act==='lang'){ LANG=el.getAttribute('data-l'); }
+  render();
+});
+render();
+</script>
+</body>
+</html>`;
+}
+
+// Entrega un HTML ya armado: en celular abre pestaña nueva, en computadora lo descarga.
+function deliverReportFile(html, fileName, mobileWin) {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    if (mobileWin) mobileWin.location.href = url;
+    else window.open(url, '_blank');
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Botón "Resumen del año": un archivo por cuenta, de enero al último mes con datos
+// del año que se está viendo.
+async function downloadAnnualReport(cliente, periodo) {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const mobileWin = isMobile ? window.open('', '_blank') : null;
+  const year = Math.floor(periodo / 100);
+  const data = buildAnnualData(cliente, year);
+  if (!data) {
+    if (mobileWin) mobileWin.close();
+    alert(L('annualNoData'));
+    return;
+  }
+  const raw = buildAnnualReportHTML(data, state.lang);
+  const html = await addStaticSnapshot(raw);
+  const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
+  deliverReportFile(html, `${safeCliente}_Resumen${year}.html`, mobileWin);
 }
 
 
