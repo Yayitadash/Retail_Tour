@@ -1272,7 +1272,56 @@ function attachHandlers() {
 // la app. Mismo espíritu que el reporte individual (Gold Medal), con
 // filtros combinables de sucursal/UN/categoría/género.
 // ============================================================
-function downloadAccountReport(cliente, periodo) {
+// Copia estática del reporte: el reporte descargable se dibuja con JavaScript,
+// y hay entornos (vista previa de correo o de WhatsApp en el celular, filtros
+// de seguridad de correo que eliminan scripts, políticas de empresa) donde esos
+// scripts no corren y el archivo se ve en blanco. Para evitarlo, antes de
+// entregar el archivo lo abrimos en un iframe oculto, esperamos a que se dibuje
+// y guardamos ese resultado ya dibujado DENTRO del propio HTML. Si los scripts
+// corren, vuelven a dibujar encima (todo igual, con filtros). Si no corren, se
+// ve el reporte completo, solo sin interactividad. Si algo falla, se entrega el
+// HTML original sin cambios.
+function addStaticSnapshot(html) {
+  return new Promise(resolve => {
+    let done = false;
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-99999px;top:0;width:1100px;height:800px;border:0;visibility:hidden;';
+    let timer = null;
+    const finish = out => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { iframe.remove(); } catch (e) {}
+      resolve(out);
+    };
+    timer = setTimeout(() => finish(html), 6000);
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          const appEl = iframe.contentDocument && iframe.contentDocument.getElementById('app');
+          const snap = appEl ? appEl.innerHTML : '';
+          const marker = '<div class="wrap" id="app"></div>';
+          if (snap && snap.length > 200 && html.indexOf(marker) !== -1) {
+            // función como reemplazo: el contenido puede traer "$" y no debe interpretarse
+            finish(html.replace(marker, () => '<div class="wrap" id="app">' + snap + '</div>'));
+            return;
+          }
+        } catch (e) {}
+        finish(html);
+      }, 400);
+    };
+    try {
+      iframe.srcdoc = html;
+      document.body.appendChild(iframe);
+    } catch (e) { finish(html); }
+  });
+}
+
+async function downloadAccountReport(cliente, periodo) {
+  // En celular se abre en una pestaña nueva; hay que abrirla ya, dentro del
+  // toque del usuario, porque después de esperar el navegador la bloquearía.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const mobileWin = isMobile ? window.open('', '_blank') : null;
   const rows = getClientCubeRowsWithStore(cliente, periodo);
   const pyPeriodo = periodo - 100;
   const pyRows = getClientCubeRowsWithStore(cliente, pyPeriodo);
@@ -1430,7 +1479,8 @@ function downloadAccountReport(cliente, periodo) {
     store: avgByStore, cat: avgByCat, fam: avgByFam, un: avgByUn, gen: avgByGen
   };
 
-  const html = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, clasif: clasif, momentum: momentum, avg: avg }, state.lang);
+  const rawHtml = buildAccountReportHTML(cliente, mes, anio, rows, pyRows, { es: insightEs, en: insightEn, icon: clasifIcon, clasif: clasif, momentum: momentum, avg: avg }, state.lang);
+  const html = await addStaticSnapshot(rawHtml);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const safeCliente = titleCase(cliente).replace(/[^a-zA-Z0-9]+/g, '_');
@@ -1442,9 +1492,9 @@ function downloadAccountReport(cliente, periodo) {
   // una pestaña nueva para que se vea y funcione igual que en computadora.
   // En computadora sí conviene el archivo descargado (para adjuntarlo a un
   // correo, por ejemplo), así que ese flujo no cambia.
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isMobile) {
-    window.open(url, '_blank');
+    if (mobileWin) mobileWin.location.href = url;
+    else window.open(url, '_blank');
   } else {
     const a = document.createElement('a');
     a.href = url;
